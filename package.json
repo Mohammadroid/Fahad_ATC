@@ -1,0 +1,22 @@
+{
+  "name": "fahad-atc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Quest 3 WebXR sandbox for Kuwait Intl (OKBK) ATC — Phase 1",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "fetch:snapshot": "node scripts/fetch-snapshot.mjs",
+    "deploy": "vite build && gh-pages -d dist -t true"
+  },
+  "dependencies": {
+    "three": "^0.163.0"
+  },
+  "devDependencies": {
+    "vite": "^5.2.0",
+    "vite-plugin-mkcert": "^1.17.5",
+    "gh-pages": "^6.1.1"
+  }
+}

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#000000" />
+    <title>OKBK ATC — Phase 1 Sandbox</title>
+    <style>
+      html, body {
+        margin: 0; padding: 0; overflow: hidden;
+        background: #0a0e14; color: #e6edf3;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      }
+      #info {
+        position: fixed; top: 12px; left: 12px; right: 12px;
+        padding: 14px 18px; background: rgba(13, 17, 23, 0.85);
+        border: 1px solid rgba(88, 166, 255, 0.25);
+        border-radius: 10px; font-size: 14px; line-height: 1.5;
+        backdrop-filter: blur(8px); max-width: 720px;
+      }
+      #info h1 { margin: 0 0 6px; font-size: 16px; color: #58a6ff; letter-spacing: 0.3px; }
+      #info p  { margin: 4px 0; opacity: 0.9; }
+      #info code { background: rgba(110, 118, 129, 0.2); padding: 1px 6px; border-radius: 3px; font-size: 13px; }
+      #ar-btn-wrap { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 10; }
+      #ar-btn-wrap button {
+        background: #1f6feb !important; border: 1px solid #58a6ff !important;
+        font-weight: 600 !important; letter-spacing: 0.5px !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="info">
+      <h1>OKBK ATC — Phase 1 Sandbox</h1>
+      <p>Open this page in the <strong>Meta Quest 3 browser</strong>, then tap <code>START AR</code>.</p>
+      <p>The tabletop airport model anchors ~1.2&nbsp;m in front of you at desk height. <strong>Pinch</strong> on an aircraft to select it and read its flight strip. On desktop, drag to orbit.</p>
+    </div>
+    <div id="ar-btn-wrap"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
