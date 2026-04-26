@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview --host",
     "fetch:snapshot": "node scripts/fetch-snapshot.mjs",
-    "deploy": "vite build && gh-pages -d dist -t true"
+    "deploy": "vite build && gh-pages -d dist"
   },
   "dependencies": {
     "three": "^0.163.0"
