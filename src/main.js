@@ -28,15 +28,15 @@ const tabletop = new THREE.Group();
 tabletop.position.set(0, 0.9, -1.2);
 scene.add(tabletop);
 
-// Visible base so the tabletop reads as an object in passthrough
+// Visible base — sized to fit OKBK including the southern military runway
 const base = new THREE.Mesh(
-  new THREE.BoxGeometry(1.6, 0.02, 1.2),
-  new THREE.MeshStandardMaterial({ color: 0x1c2230, roughness: 0.85, metalness: 0.1 })
+  new THREE.BoxGeometry(1.6, 0.02, 1.6),
+  new THREE.MeshStandardMaterial({ color: 0x2a2820, roughness: 0.92, metalness: 0.0 })
 );
 base.position.y = -0.012;
 tabletop.add(base);
 
-const airport = buildAirport();
+const airport = await buildAirport();
 tabletop.add(airport);
 
 // Feed selection: ?snapshot=<filename> loads a snapshot JSON from /data/.

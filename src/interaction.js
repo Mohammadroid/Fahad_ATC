@@ -30,16 +30,21 @@ export function setupInteraction({ scene, tabletop, hands, traffic }) {
   }
 
   function select(ac) {
-    if (selected && selected !== ac) {
-      selected.children[0].material.emissiveIntensity = 0.5;
-    }
+    if (selected && selected !== ac) setHighlight(selected, false);
     selected = ac;
     if (!ac) { card.visible = false; return; }
-    ac.children[0].material.emissiveIntensity = 1.6;
+    setHighlight(ac, true);
     redrawCard(ac.userData);
     ac.getWorldPosition(tmp);
     card.position.copy(tmp).add(new THREE.Vector3(0.18, 0.08, 0));
     card.visible = true;
+  }
+
+  function setHighlight(group, on) {
+    const ring = group.userData?.stateRing;
+    if (!ring) return;
+    ring.material.opacity = on ? 0.95 : 0.55;
+    ring.scale.setScalar(on ? 1.45 : 1.0);
   }
 
   function makeCard() {
