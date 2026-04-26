@@ -1,0 +1,92 @@
+{
+  "source": "example",
+  "note": "Synthetic example for 31 Dec 2025 20:00 Asia/Kuwait. Replace with real OpenSky data via scripts/fetch-snapshot.mjs.",
+  "time_unix": 1767200400,
+  "time_iso": "2025-12-31T17:00:00.000Z",
+  "time_local": "2025-12-31T20:00:00+03:00",
+  "okbk": { "lat": 29.2266, "lon": 47.9689 },
+  "bbox": { "lamin": 28.93, "lomin": 47.66, "lamax": 29.53, "lomax": 48.28 },
+  "aircraft": [
+    {
+      "icao24": "896180",
+      "callsign": "KAC101",
+      "type": "B772",
+      "state": "AIRBORNE_IN",
+      "lat": 29.107, "lon": 48.039,
+      "alt": 8000, "hdg": 333, "speed_kt": 240,
+      "on_ground": false
+    },
+    {
+      "icao24": "896230",
+      "callsign": "KAC788",
+      "type": "B788",
+      "state": "AIRBORNE_IN",
+      "lat": 29.027, "lon": 48.086,
+      "alt": 12000, "hdg": 333, "speed_kt": 290,
+      "on_ground": false
+    },
+    {
+      "icao24": "8961A4",
+      "callsign": "KAC234",
+      "type": "A332",
+      "state": "AIRBORNE_IN",
+      "lat": 29.147, "lon": 48.016,
+      "alt": 5500, "hdg": 333, "speed_kt": 200,
+      "on_ground": false
+    },
+    {
+      "icao24": "8961F0",
+      "callsign": "KAC512",
+      "type": "A320",
+      "state": "AIRBORNE_OUT",
+      "lat": 29.251, "lon": 47.955,
+      "alt": 4500, "hdg": 333, "speed_kt": 230,
+      "on_ground": false
+    },
+    {
+      "icao24": "896540",
+      "callsign": "FDB061",
+      "type": "B738",
+      "state": "AIRBORNE_OUT",
+      "lat": 29.163, "lon": 48.006,
+      "alt": 6500, "hdg": 153, "speed_kt": 260,
+      "on_ground": false
+    },
+    {
+      "icao24": "896318",
+      "callsign": "UAE855",
+      "type": "B77W",
+      "state": "CLEARED",
+      "lat": 29.226, "lon": 47.969,
+      "alt": 0, "hdg": 333, "speed_kt": 60,
+      "on_ground": true
+    },
+    {
+      "icao24": "8964A1",
+      "callsign": "JZR318",
+      "type": "A320",
+      "state": "QUEUED",
+      "lat": 29.220, "lon": 47.970,
+      "alt": 0, "hdg": 333, "speed_kt": 0,
+      "on_ground": true
+    },
+    {
+      "icao24": "8964B5",
+      "callsign": "JZR223",
+      "type": "A320",
+      "state": "TAXI",
+      "lat": 29.228, "lon": 47.965,
+      "alt": 0, "hdg": 90, "speed_kt": 16,
+      "on_ground": true
+    },
+    {
+      "icao24": "896608",
+      "callsign": "QTR1077",
+      "type": "A359",
+      "state": "PARKED",
+      "lat": 29.231, "lon": 47.981,
+      "alt": 0, "hdg": 270, "speed_kt": 0,
+      "on_ground": true
+    }
+  ]
+}
