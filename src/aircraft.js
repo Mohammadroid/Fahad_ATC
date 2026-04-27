@@ -72,6 +72,16 @@ const TYPE_TO_MODEL = {
 };
 const DEFAULT_MODEL = 'airliner_detail.glb';
 
+// Per-model native orientation (degrees, applied as Euler XYZ before scaling).
+// Determined empirically by scripts/analyze-models.mjs — see CREDITS.md.
+// Goal: nose along world +Z, top along world +Y.
+const MODEL_ORIENT = {
+  'b747.glb':            { rx: 0, ry: 180, rz: 0 }, // native length=-z
+  'b787.glb':            { rx: 0, ry:   0, rz: 0 }, // native length=+z
+  'airliner_gear.glb':   { rx: 0, ry:   0, rz: 0 }, // native length=+z
+  'airliner_detail.glb': { rx: 0, ry:   0, rz: 0 }, // native length=+z
+};
+
 const loader = new GLTFLoader();
 const modelCache = new Map();
 
@@ -156,20 +166,21 @@ async function upgradeToGltf(group, data, livery) {
     else if (o.material) o.material = o.material.clone();
   });
 
-  // Detect orientation: longest axis of the bbox = fuselage length.
-  const initBbox = new THREE.Box3().setFromObject(scene);
-  const initSize = initBbox.getSize(new THREE.Vector3());
-  const sizes = [initSize.x, initSize.y, initSize.z];
-  const longestIdx = sizes.indexOf(Math.max(...sizes));
-  // Rotate so longest axis points along world +Z (our heading axis).
-  if (longestIdx === 0) scene.rotation.y = -Math.PI / 2;
-  else if (longestIdx === 1) scene.rotation.x = Math.PI / 2;
+  // Apply the model-specific orientation so nose is along world +Z.
+  const orient = MODEL_ORIENT[fname] || { rx: 0, ry: 0, rz: 0 };
+  scene.rotation.set(
+    THREE.MathUtils.degToRad(orient.rx),
+    THREE.MathUtils.degToRad(orient.ry),
+    THREE.MathUtils.degToRad(orient.rz)
+  );
 
   // Wrap so we can apply additional transforms cleanly.
   const wrapper = new THREE.Group();
   wrapper.add(scene);
 
-  // Scale to the ICAO type's real length.
+  // Scale uniformly so the post-rotation length (Z extent) matches the ICAO
+  // type's real length. We use Z because rotation has aligned the fuselage
+  // along +Z by now.
   const postBbox = new THREE.Box3().setFromObject(wrapper);
   const postSize = postBbox.getSize(new THREE.Vector3());
   const dim = getDims(data.type);
