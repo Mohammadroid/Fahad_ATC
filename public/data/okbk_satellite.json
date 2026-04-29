@@ -1,0 +1,13 @@
+{
+  "source": "Esri World Imagery via ArcGIS Online (https://www.arcgis.com/)",
+  "attribution": "Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+  "image": "okbk_satellite.jpg",
+  "bbox": {
+    "lon_min": 47.9328,
+    "lat_min": 29.1952,
+    "lon_max": 48.0050,
+    "lat_max": 29.2580
+  },
+  "size_px": [2048, 2048],
+  "fetched_via": "scripts/fetch-satellite.mjs"
+}

@@ -33,47 +33,54 @@ export async function buildAirport() {
 
   console.log(`[airport] OSM loaded: ${elements.length} elements`);
 
-  // Render bottom-up so layers stack correctly.
-  // 1. Aerodrome boundary — subtle outline
-  for (const a of byTag('aerodrome')) {
-    const m = makePolygon(a.geometry, 0x33372a, 0.0004, true);
-    if (m) root.add(m);
+  // Layer 0: cached satellite imagery (Esri World Imagery)
+  try {
+    const sat = await loadSatelliteGround();
+    if (sat) root.add(sat);
+  } catch (err) {
+    console.warn('[airport] satellite ground unavailable, falling back to OSM polygons:', err);
+    // Fallback: draw aerodrome boundary + aprons from OSM as before
+    for (const a of byTag('aerodrome')) {
+      const m = makePolygon(a.geometry, 0x33372a, 0.0004, true);
+      if (m) root.add(m);
+    }
+    for (const a of byTag('apron')) {
+      const m = makePolygon(a.geometry, 0x6a6c72, 0.0008);
+      if (m) root.add(m);
+    }
   }
 
-  // 2. Aprons — light grey concrete
-  for (const a of byTag('apron')) {
-    const m = makePolygon(a.geometry, 0x6a6c72, 0.0008);
-    if (m) root.add(m);
-  }
-
-  // 3. Taxiways — medium grey ribbons
+  // 3. Taxiway centerlines — bright yellow accent on top of the satellite imagery
   for (const t of byTag('taxiway')) {
-    const m = makeFlatRibbon(t.geometry, 0x3a3c40, 23, 0.0010);
-    if (m) root.add(m);
+    const m = makeFlatRibbon(t.geometry, 0xfacc15, 1.2, 0.0014);
+    if (m) {
+      m.material.transparent = true;
+      m.material.opacity = 0.55;
+      root.add(m);
+    }
   }
 
-  // 4. Runway stopways — dark red
+  // 4. Runway stopways — dark red overlay
   for (const s of byTag('stopway')) {
     const widthM = parseFloat(s.tags.width) || 45;
-    const m = makeFlatRibbon(s.geometry, 0x331111, widthM, 0.0012);
-    if (m) root.add(m);
+    const m = makeFlatRibbon(s.geometry, 0x4a1818, widthM, 0.0016);
+    if (m) {
+      m.material.transparent = true; m.material.opacity = 0.6;
+      root.add(m);
+    }
   }
 
-  // 5. Runways — dark surface + white centerline
+  // 5. Runway centerlines + threshold bars (the dark asphalt is in the satellite)
   for (const r of byTag('runway')) {
     const widthM = parseFloat(r.tags.width) || 45;
-    const surface = makeFlatRibbon(r.geometry, 0x09090d, widthM, 0.0014);
-    if (surface) {
-      surface.userData.runway = r.tags.ref;
-      root.add(surface);
+    const center = makeFlatRibbon(r.geometry, 0xffffff, 1.8, 0.0022);
+    if (center) {
+      center.userData.runway = r.tags.ref;
+      root.add(center);
     }
-    const center = makeFlatRibbon(r.geometry, 0xf0f0f0, 1.5, 0.0020);
-    if (center) root.add(center);
-
-    // Threshold bars at each end
-    const tBar1 = makeThreshold(r.geometry, widthM * 0.85, 6, 0, 0.0021);
+    const tBar1 = makeThreshold(r.geometry, widthM * 0.85, 6, 0, 0.0023);
     if (tBar1) root.add(tBar1);
-    const tBar2 = makeThreshold(r.geometry, widthM * 0.85, 6, r.geometry.length - 1, 0.0021);
+    const tBar2 = makeThreshold(r.geometry, widthM * 0.85, 6, r.geometry.length - 1, 0.0023);
     if (tBar2) root.add(tBar2);
   }
 
@@ -85,22 +92,37 @@ export async function buildAirport() {
     }
   }
 
-  // 7. Terminals — extruded buildings
+  // 7. Terminals — extruded buildings on top of the satellite footprint.
+  // Heights inferred from OSM `building:levels` × ~3.5 m, or default 22 m.
   for (const t of byTag('terminal')) {
-    const m = makeBuilding(t.geometry, 0x4a5a78, 22 * SCALE);
+    const h = inferBuildingHeight(t.tags, 22) * SCALE;
+    const m = makeBuilding(t.geometry, 0x6e7e9a, h);
     if (m) {
       m.userData.terminal = t.tags.name || t.tags.ref;
       root.add(m);
     }
   }
 
-  // 8. Hangars — slightly shorter
+  // 8. Hangars — slightly shorter, more saturated grey
   for (const h of byTag('hangar')) {
-    const m = makeBuilding(h.geometry, 0x5a5a62, 14 * SCALE);
+    const ht = inferBuildingHeight(h.tags, 14) * SCALE;
+    const m = makeBuilding(h.geometry, 0x7a7a82, ht);
     if (m) root.add(m);
   }
 
   return root;
+}
+
+function inferBuildingHeight(tags, fallbackM) {
+  if (tags?.height) {
+    const v = parseFloat(tags.height);
+    if (Number.isFinite(v)) return v;
+  }
+  if (tags?.['building:levels']) {
+    const lv = parseFloat(tags['building:levels']);
+    if (Number.isFinite(lv)) return lv * 3.5;
+  }
+  return fallbackM;
 }
 
 // ---- geometry helpers ----
@@ -109,6 +131,42 @@ export function latLonToTab(lat, lon) {
   const dxM = (lon - OKBK_LON) * 111320 * COS_LAT;
   const dzM = -(lat - OKBK_LAT) * 111320;
   return [dxM * SCALE, dzM * SCALE];
+}
+
+async function loadSatelliteGround() {
+  // Read the bbox metadata so the texture is positioned exactly where it was sampled.
+  const metaUrl = `${import.meta.env.BASE_URL}data/okbk_satellite.json`;
+  const imgUrl  = `${import.meta.env.BASE_URL}data/okbk_satellite.jpg`;
+
+  const metaRes = await fetch(metaUrl);
+  if (!metaRes.ok) throw new Error(`satellite metadata HTTP ${metaRes.status}`);
+  const meta = await metaRes.json();
+  const bb = meta.bbox;
+
+  const tex = await new Promise((resolve, reject) => {
+    new THREE.TextureLoader().load(imgUrl, resolve, undefined, reject);
+  });
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+
+  // Compute the centre of the bbox in tabletop coords.
+  const [centerX, centerZ] = latLonToTab((bb.lat_min + bb.lat_max) / 2, (bb.lon_min + bb.lon_max) / 2);
+  // Plane width/height in world units.
+  const [xMin] = latLonToTab((bb.lat_min + bb.lat_max) / 2, bb.lon_min);
+  const [xMax] = latLonToTab((bb.lat_min + bb.lat_max) / 2, bb.lon_max);
+  const [, zMax] = latLonToTab(bb.lat_min, (bb.lon_min + bb.lon_max) / 2);
+  const [, zMin] = latLonToTab(bb.lat_max, (bb.lon_min + bb.lon_max) / 2);
+  const widthW = Math.abs(xMax - xMin);
+  const depthW = Math.abs(zMax - zMin);
+
+  const plane = new THREE.Mesh(
+    new THREE.PlaneGeometry(widthW, depthW),
+    new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, metalness: 0 })
+  );
+  plane.rotation.x = -Math.PI / 2;
+  plane.position.set(centerX, 0.0002, centerZ);
+  plane.userData.attribution = meta.attribution;
+  return plane;
 }
 
 // Build a flat ribbon (quad strip) along a polyline at the given world-space

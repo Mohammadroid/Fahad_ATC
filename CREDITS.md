@@ -17,6 +17,14 @@ Models are scaled at runtime to match real ICAO-type dimensions and tinted with 
 
 `public/data/okbk_osm.json` is © **OpenStreetMap contributors**, licensed under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/). Fetched via the [Overpass API](https://overpass-api.de/).
 
+## Satellite Imagery
+
+`public/data/okbk_satellite.jpg` is from **Esri World Imagery** via the ArcGIS Online REST endpoint. Free for non-commercial / research use with attribution.
+
+> Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community
+
+For commercial deployment, use a licensed Esri ArcGIS account or another provider (Mapbox, MapTiler, Google Maps Platform).
+
 ## Code
 
 Project source code is unlicensed — see repository root for terms when added.
