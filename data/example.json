@@ -8,85 +8,67 @@
   "bbox": { "lamin": 28.93, "lomin": 47.66, "lamax": 29.53, "lomax": 48.28 },
   "aircraft": [
     {
-      "icao24": "896180",
-      "callsign": "KAC101",
-      "type": "B772",
-      "state": "AIRBORNE_IN",
-      "lat": 29.107, "lon": 48.039,
-      "alt": 8000, "hdg": 333, "speed_kt": 240,
-      "on_ground": false
+      "icao24": "896180", "callsign": "KAC101", "type": "B772",
+      "state": "AIRBORNE_IN", "lat": 29.107, "lon": 48.039,
+      "alt": 8000, "hdg": 333, "speed_kt": 240, "vrate_fpm": -1200,
+      "on_ground": false, "origin": "LHR", "destination": "OKBK",
+      "origin_name": "London Heathrow"
     },
     {
-      "icao24": "896230",
-      "callsign": "KAC788",
-      "type": "B788",
-      "state": "AIRBORNE_IN",
-      "lat": 29.027, "lon": 48.086,
-      "alt": 12000, "hdg": 333, "speed_kt": 290,
-      "on_ground": false
+      "icao24": "896230", "callsign": "KAC788", "type": "B788",
+      "state": "AIRBORNE_IN", "lat": 29.027, "lon": 48.086,
+      "alt": 12000, "hdg": 333, "speed_kt": 290, "vrate_fpm": -1500,
+      "on_ground": false, "origin": "KUL", "destination": "OKBK",
+      "origin_name": "Kuala Lumpur"
     },
     {
-      "icao24": "8961A4",
-      "callsign": "KAC234",
-      "type": "A332",
-      "state": "AIRBORNE_IN",
-      "lat": 29.147, "lon": 48.016,
-      "alt": 5500, "hdg": 333, "speed_kt": 200,
-      "on_ground": false
+      "icao24": "8961A4", "callsign": "KAC234", "type": "A332",
+      "state": "AIRBORNE_IN", "lat": 29.147, "lon": 48.016,
+      "alt": 5500, "hdg": 333, "speed_kt": 200, "vrate_fpm": -900,
+      "on_ground": false, "origin": "JED", "destination": "OKBK",
+      "origin_name": "Jeddah"
     },
     {
-      "icao24": "8961F0",
-      "callsign": "KAC512",
-      "type": "A320",
-      "state": "AIRBORNE_OUT",
-      "lat": 29.251, "lon": 47.955,
-      "alt": 4500, "hdg": 333, "speed_kt": 230,
-      "on_ground": false
+      "icao24": "8961F0", "callsign": "KAC512", "type": "A320",
+      "state": "AIRBORNE_OUT", "lat": 29.251, "lon": 47.955,
+      "alt": 4500, "hdg": 333, "speed_kt": 230, "vrate_fpm": 2200,
+      "on_ground": false, "origin": "OKBK", "destination": "LHR",
+      "destination_name": "London Heathrow"
     },
     {
-      "icao24": "896540",
-      "callsign": "FDB061",
-      "type": "B738",
-      "state": "AIRBORNE_OUT",
-      "lat": 29.163, "lon": 48.006,
-      "alt": 6500, "hdg": 153, "speed_kt": 260,
-      "on_ground": false
+      "icao24": "896540", "callsign": "FDB061", "type": "B738",
+      "state": "AIRBORNE_OUT", "lat": 29.163, "lon": 48.006,
+      "alt": 6500, "hdg": 153, "speed_kt": 260, "vrate_fpm": 1800,
+      "on_ground": false, "origin": "OKBK", "destination": "DXB",
+      "destination_name": "Dubai"
     },
     {
-      "icao24": "896318",
-      "callsign": "UAE855",
-      "type": "B77W",
-      "state": "CLEARED",
-      "lat": 29.226, "lon": 47.969,
-      "alt": 0, "hdg": 333, "speed_kt": 60,
-      "on_ground": true
+      "icao24": "896318", "callsign": "UAE855", "type": "B77W",
+      "state": "CLEARED", "lat": 29.226, "lon": 47.969,
+      "alt": 0, "hdg": 333, "speed_kt": 60, "vrate_fpm": 0,
+      "on_ground": true, "origin": "OKBK", "destination": "DXB",
+      "destination_name": "Dubai"
     },
     {
-      "icao24": "8964A1",
-      "callsign": "JZR318",
-      "type": "A320",
-      "state": "QUEUED",
-      "lat": 29.220, "lon": 47.970,
-      "alt": 0, "hdg": 333, "speed_kt": 0,
-      "on_ground": true
+      "icao24": "8964A1", "callsign": "JZR318", "type": "A320",
+      "state": "QUEUED", "lat": 29.220, "lon": 47.970,
+      "alt": 0, "hdg": 333, "speed_kt": 0, "vrate_fpm": 0,
+      "on_ground": true, "origin": "OKBK", "destination": "ISU",
+      "destination_name": "Sulaymaniyah"
     },
     {
-      "icao24": "8964B5",
-      "callsign": "JZR223",
-      "type": "A320",
-      "state": "TAXI",
-      "lat": 29.228, "lon": 47.965,
-      "alt": 0, "hdg": 90, "speed_kt": 16,
-      "on_ground": true
+      "icao24": "8964B5", "callsign": "JZR223", "type": "A320",
+      "state": "TAXI", "lat": 29.228, "lon": 47.965,
+      "alt": 0, "hdg": 90, "speed_kt": 16, "vrate_fpm": 0,
+      "on_ground": true, "origin": "OKBK", "destination": "BEY",
+      "destination_name": "Beirut"
     },
     {
-      "icao24": "896608",
-      "callsign": "QTR1077",
-      "type": "A359",
-      "state": "PARKED",
-      "lat": 29.231, "lon": 47.981,
-      "alt": 0, "hdg": 270, "speed_kt": 0,
-      "on_ground": true
+      "icao24": "896608", "callsign": "QTR1077", "type": "A359",
+      "state": "PARKED", "lat": 29.231, "lon": 47.981,
+      "alt": 0, "hdg": 270, "speed_kt": 0, "vrate_fpm": 0,
+      "on_ground": true, "origin": "DOH", "destination": "OKBK",
+      "origin_name": "Doha"
     }
   ]
 }
