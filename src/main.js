@@ -57,7 +57,7 @@ if (snapshotName) {
   traffic = new TrafficSimulator(tabletop);
 }
 
-// Hand tracking
+// Hand tracking + targetRay-space controllers (used for laser pointers)
 const handFactory = new XRHandModelFactory();
 const hand0 = renderer.xr.getHand(0);
 const hand1 = renderer.xr.getHand(1);
@@ -66,7 +66,32 @@ hand1.add(handFactory.createHandModel(hand1, 'boxes'));
 scene.add(hand0);
 scene.add(hand1);
 
-const interaction = setupInteraction({ scene, tabletop, hands: [hand0, hand1], traffic });
+const ctrl0 = renderer.xr.getController(0);
+const ctrl1 = renderer.xr.getController(1);
+ctrl0.add(makeLaserBeam());
+ctrl1.add(makeLaserBeam());
+scene.add(ctrl0);
+scene.add(ctrl1);
+
+function makeLaserBeam() {
+  const geo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0, 0, -3), // 3 m forward along controller -Z
+  ]);
+  const mat = new THREE.LineBasicMaterial({
+    color: 0x4a9eff, transparent: true, opacity: 0.45, depthTest: false,
+  });
+  const line = new THREE.Line(geo, mat);
+  line.renderOrder = 30;
+  return line;
+}
+
+const interaction = setupInteraction({
+  scene, tabletop,
+  hands: [hand0, hand1],
+  controllers: [ctrl0, ctrl1],
+  traffic,
+});
 
 // Desktop preview controls (only used outside XR)
 const orbit = new OrbitControls(camera, renderer.domElement);

@@ -103,6 +103,31 @@ function getDims(typeCode) {
   return TYPE_DIMS[(typeCode || '').toUpperCase()] || DEFAULT_DIM;
 }
 
+const TYPE_NAMES = {
+  B737: 'Boeing 737',           B738: 'Boeing 737-800',     B739: 'Boeing 737-900',
+  B752: 'Boeing 757-200',       B763: 'Boeing 767-300',
+  B772: 'Boeing 777-200',       B77W: 'Boeing 777-300ER',
+  B788: 'Boeing 787-8',         B789: 'Boeing 787-9',       B78X: 'Boeing 787-10',
+  B747: 'Boeing 747',           B748: 'Boeing 747-8',
+  A319: 'Airbus A319',          A320: 'Airbus A320',        A321: 'Airbus A321',
+  A332: 'Airbus A330-200',      A333: 'Airbus A330-300',
+  A359: 'Airbus A350-900',      A35K: 'Airbus A350-1000',
+  A388: 'Airbus A380',
+  E170: 'Embraer 170',          E190: 'Embraer 190',
+};
+
+export function getAirlineName(callsign) {
+  return getLivery(callsign).name || '';
+}
+
+export function getAirlineAccent(callsign) {
+  return getLivery(callsign).accent;
+}
+
+export function getTypeName(typeCode) {
+  return TYPE_NAMES[(typeCode || '').toUpperCase()] || (typeCode || '');
+}
+
 export function buildAircraftGroup(data) {
   const group = new THREE.Group();
   group.userData = { ...data };
