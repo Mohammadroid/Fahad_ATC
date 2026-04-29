@@ -23,9 +23,10 @@ const sun = new THREE.DirectionalLight(0xffffff, 1.4);
 sun.position.set(5, 10, 5);
 scene.add(sun);
 
-// Tabletop root — desk height, 1.2 m forward of headset
+// Tabletop root — low coffee-table height, 0.7 m forward. User can pinch
+// + drag to reposition, or two-handed pinch to scale + rotate (see interaction.js).
 const tabletop = new THREE.Group();
-tabletop.position.set(0, 0.9, -1.2);
+tabletop.position.set(0, 0.55, -0.7);
 scene.add(tabletop);
 
 // Visible base — sized to fit OKBK including the southern military runway
@@ -33,6 +34,7 @@ const base = new THREE.Mesh(
   new THREE.BoxGeometry(1.6, 0.02, 1.6),
   new THREE.MeshStandardMaterial({ color: 0x2a2820, roughness: 0.92, metalness: 0.0 })
 );
+base.name = 'tabletop-base';
 base.position.y = -0.012;
 tabletop.add(base);
 
@@ -64,7 +66,7 @@ hand1.add(handFactory.createHandModel(hand1, 'boxes'));
 scene.add(hand0);
 scene.add(hand1);
 
-setupInteraction({ scene, tabletop, hands: [hand0, hand1], traffic });
+const interaction = setupInteraction({ scene, tabletop, hands: [hand0, hand1], traffic });
 
 // Desktop preview controls (only used outside XR)
 const orbit = new OrbitControls(camera, renderer.domElement);
@@ -86,6 +88,7 @@ const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
   if (!renderer.xr.isPresenting) orbit.update();
+  interaction.update();
   traffic.update(dt);
   renderer.render(scene, camera);
 });
