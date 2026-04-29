@@ -46,16 +46,26 @@ tabletop.add(airport);
 const params = new URLSearchParams(location.search);
 const snapshotName = params.get('snapshot');
 let traffic;
+let statusText = 'Simulator (animated)';
 if (snapshotName) {
   try {
     traffic = await SnapshotPlayer.load(`${import.meta.env.BASE_URL}data/${snapshotName}`, tabletop);
+    const snap = traffic.snapshot;
+    const ts = snap?.time_iso ? new Date(snap.time_iso).toLocaleString() : '?';
+    const total = snap?.counts?.total ?? snap?.aircraft?.length ?? 0;
+    const near = snap?.counts?.near_50nm ?? '-';
+    const distant = snap?.counts?.distant ?? '-';
+    statusText = `${snap?.source || snapshotName} · ${ts} · ${total} aircraft (near ${near} / distant ${distant})`;
   } catch (err) {
     console.error('[snapshot] load failed, falling back to simulator:', err);
     traffic = new TrafficSimulator(tabletop);
+    statusText = `Snapshot load failed → simulator`;
   }
 } else {
   traffic = new TrafficSimulator(tabletop);
 }
+const statusEl = document.getElementById('status-badge');
+if (statusEl) statusEl.textContent = `Source: ${statusText}`;
 
 // Hand tracking + targetRay-space controllers (used for laser pointers)
 const handFactory = new XRHandModelFactory();
