@@ -26,11 +26,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet public/data/okbk_today.json; then
+          if git diff --quiet public/data/okbk_live.json; then
             echo "No change."
           else
-            git add public/data/okbk_today.json
-            git commit -m "auto: refresh okbk_today.json"
+            git add public/data/okbk_live.json
+            git commit -m "auto: refresh okbk_live.json"
             git push
           fi
 

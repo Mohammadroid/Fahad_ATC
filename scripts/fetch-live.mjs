@@ -97,6 +97,8 @@ const snapshot = {
 
 const outDir = path.join(ROOT, 'public', 'data');
 await fs.mkdir(outDir, { recursive: true });
-const outPath = path.join(outDir, 'okbk_today.json');
+// Writes okbk_live.json (the curated okbk_today.json is left untouched as the
+// default scenario when live data is unavailable).
+const outPath = path.join(outDir, 'okbk_live.json');
 await fs.writeFile(outPath, JSON.stringify(snapshot, null, 2));
 console.log(`✓ ${path.relative(ROOT, outPath)}: ${aircraft.length} total · ${near.length} within 50 nm · ${distant.length} distant`);
