@@ -1,0 +1,54 @@
+name: Refresh OKBK live data
+
+# Manual-trigger only until verified working. Add a `schedule:` block once
+# the first dispatch succeeds — see commented example at the bottom.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # peaceiris/actions-gh-pages pushes to gh-pages branch
+
+concurrency:
+  group: deploy-pages
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Fetch live OpenSky snapshot
+        # Anonymous OpenSky access works for current state vectors.
+        # Set OPENSKY_USER / OPENSKY_PASS as repo secrets to unlock historical
+        # queries and a higher rate limit.
+        env:
+          OPENSKY_USER: ${{ secrets.OPENSKY_USER }}
+          OPENSKY_PASS: ${{ secrets.OPENSKY_PASS }}
+        run: node scripts/fetch-live.mjs
+
+      - name: Build site
+        run: npm run build
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          user_name: 'github-actions[bot]'
+          user_email: '41898282+github-actions[bot]@users.noreply.github.com'
+          commit_message: 'auto: refresh okbk_live.json'
+
+# To enable hourly auto-refresh once you've confirmed the manual run works:
+#
+# on:
+#   schedule:
+#     - cron: '17 * * * *'   # every hour at :17
+#   workflow_dispatch:

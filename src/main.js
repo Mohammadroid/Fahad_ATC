@@ -97,7 +97,7 @@ function makeLaserBeam() {
 }
 
 const interaction = setupInteraction({
-  scene, tabletop,
+  scene, tabletop, renderer,
   hands: [hand0, hand1],
   controllers: [ctrl0, ctrl1],
   traffic,
@@ -109,7 +109,7 @@ orbit.target.set(0, 0.9, -1.2);
 orbit.update();
 
 const arButton = ARButton.createButton(renderer, {
-  optionalFeatures: ['hand-tracking', 'local-floor', 'bounded-floor'],
+  optionalFeatures: ['hand-tracking', 'local-floor', 'bounded-floor', 'hit-test'],
 });
 document.getElementById('ar-btn-wrap').appendChild(arButton);
 
@@ -120,10 +120,10 @@ window.addEventListener('resize', () => {
 });
 
 const clock = new THREE.Clock();
-renderer.setAnimationLoop(() => {
+renderer.setAnimationLoop((time, frame) => {
   const dt = Math.min(clock.getDelta(), 0.05);
   if (!renderer.xr.isPresenting) orbit.update();
-  interaction.update();
+  interaction.update(frame);
   traffic.update(dt);
   renderer.render(scene, camera);
 });

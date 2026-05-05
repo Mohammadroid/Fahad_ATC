@@ -20,7 +20,7 @@ import { SCALE } from './airport.js';
 
 const NM_TO_M = 1852;
 
-export function setupInteraction({ scene, tabletop, hands, controllers, traffic }) {
+export function setupInteraction({ scene, tabletop, hands, controllers, traffic, renderer }) {
   // ----- card sprite -----
   const card = makeCard();
   scene.add(card);
@@ -40,6 +40,38 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic 
   // ----- per-frame ray hover -----
   let hovers = controllers.map(() => null); // {type, target, point} per controller
 
+  // ----- hit-test placement (AR-only) -----
+  const reticle = makeReticle();
+  scene.add(reticle);
+  let hitTestSource = null;
+  let placedOnSurface = false;
+  let savedTabletopPos = null;
+
+  if (renderer) {
+    renderer.xr.addEventListener('sessionstart', async () => {
+      const session = renderer.xr.getSession();
+      if (!session?.requestHitTestSource) return;
+      try {
+        const viewerSpace = await session.requestReferenceSpace('viewer');
+        hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+        // Hide the tabletop until the user picks a surface to place it on.
+        savedTabletopPos = tabletop.position.clone();
+        tabletop.visible = false;
+        placedOnSurface = false;
+      } catch (err) {
+        console.warn('[xr] hit-test unavailable, using default placement:', err);
+      }
+    });
+
+    renderer.xr.addEventListener('sessionend', () => {
+      hitTestSource = null;
+      reticle.visible = false;
+      tabletop.visible = true;
+      if (savedTabletopPos) tabletop.position.copy(savedTabletopPos);
+      placedOnSurface = false;
+    });
+  }
+
   for (let i = 0; i < controllers.length; i++) {
     const ctrl = controllers[i];
     ctrl.userData.handIdx = i;
@@ -49,7 +81,22 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic 
 
   // -----------------------------------------------------------
   // Per-frame loop driver
-  function update() {
+  function update(frame) {
+    // 0) Hit-test placement reticle (AR-only, until first pinch on surface)
+    if (hitTestSource && frame && !placedOnSurface) {
+      const refSpace = renderer.xr.getReferenceSpace();
+      const hits = frame.getHitTestResults(hitTestSource);
+      if (hits.length > 0) {
+        const pose = hits[0].getPose(refSpace);
+        if (pose) {
+          reticle.matrix.fromArray(pose.transform.matrix);
+          reticle.visible = true;
+        }
+      } else {
+        reticle.visible = false;
+      }
+    }
+
     // 1) Update laser hits + cursors
     for (let i = 0; i < controllers.length; i++) {
       const hit = rayHit(controllers[i]);
@@ -113,6 +160,21 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic 
     const ctrl = controllers[idx];
     const hand = hands[idx];
     const hit = hovers[idx];
+
+    // 0. First-time AR placement: pinch with reticle visible drops the
+    //    tabletop onto the detected surface (your real table).
+    if (!placedOnSurface && reticle.visible) {
+      const surfacePos = new THREE.Vector3();
+      surfacePos.setFromMatrixPosition(reticle.matrix);
+      tabletop.position.copy(surfacePos);
+      tabletop.rotation.set(0, tabletop.rotation.y, 0); // keep airport level
+      tabletop.scale.setScalar(1);
+      tabletop.updateMatrix();
+      tabletop.visible = true;
+      placedOnSurface = true;
+      reticle.visible = false;
+      return; // consume this pinch — don't also trigger select/grab
+    }
 
     // 1. Laser hit on aircraft → toggle select
     if (hit?.type === 'aircraft') {
@@ -429,6 +491,26 @@ function makeCursor() {
   m.renderOrder = 25;
   m.visible = false;
   return m;
+}
+
+function makeReticle() {
+  // Outer ring (pulse target) + inner cross hairs — visible against any surface.
+  const g = new THREE.Group();
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.07, 0.085, 32).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0x4a9eff, transparent: true, opacity: 0.9, depthTest: false })
+  );
+  const dot = new THREE.Mesh(
+    new THREE.CircleGeometry(0.012, 16).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthTest: false })
+  );
+  ring.renderOrder = 26;
+  dot.renderOrder = 27;
+  g.add(ring);
+  g.add(dot);
+  g.matrixAutoUpdate = false;
+  g.visible = false;
+  return g;
 }
 
 function stateHexColor(state) {
