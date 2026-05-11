@@ -32,11 +32,42 @@ if (process.env.OPENSKY_USER && process.env.OPENSKY_PASS) {
 }
 
 console.log(`Fetching ${url.toString()}`);
-const res = await fetch(url, { headers });
+
+async function fetchWithRetry(url, options, { retries = 3, timeoutMs = 30000 } = {}) {
+  let lastErr;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const r = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(t);
+      return r;
+    } catch (err) {
+      clearTimeout(t);
+      lastErr = err;
+      console.warn(`  attempt ${attempt}/${retries} failed: ${err.message}`);
+      if (attempt < retries) await new Promise((r) => setTimeout(r, attempt * 3000));
+    }
+  }
+  throw lastErr;
+}
+
+let res;
+try {
+  res = await fetchWithRetry(url, { headers });
+} catch (err) {
+  // Network-level failure (DNS, connect timeout, etc). Treat as soft-fail: the
+  // workflow keeps the previous snapshot rather than overwriting it with junk.
+  console.warn(`OpenSky unreachable after retries: ${err.message}`);
+  console.warn('Keeping existing okbk_live.json unchanged.');
+  process.exit(0);
+}
 if (!res.ok) {
   console.error(`OpenSky ${res.status} ${res.statusText}`);
   console.error((await res.text()).slice(0, 400));
-  process.exit(1);
+  // Non-2xx is also a soft-fail — don't break the workflow over upstream hiccups.
+  console.warn('Keeping existing okbk_live.json unchanged.');
+  process.exit(0);
 }
 const json = await res.json();
 const states = json.states || [];
