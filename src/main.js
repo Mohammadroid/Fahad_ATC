@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
 import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { buildAirport } from './airport.js';
+import { buildAirport, setOSMOverlaysVisible } from './airport.js';
+import { buildAirportTiles } from './airport_tiles.js';
 import { TrafficSimulator } from './traffic.js';
 import { SnapshotPlayer } from './feeds/snapshot.js';
 import { setupInteraction } from './interaction.js';
@@ -41,8 +42,31 @@ tabletop.add(base);
 const airport = await buildAirport();
 tabletop.add(airport);
 
-// Feed selection: ?snapshot=<filename> loads a snapshot JSON from /data/.
-// Default is the live simulator.
+// Photoreal Google 3D Tiles mode: `?airport=tiles` URL param + a Google Maps
+// API key with the "Map Tiles API" enabled. Key can be passed once via
+// `?gkey=KEY` (persisted to localStorage) or set in localStorage directly.
+const wantTiles = params.get('airport') === 'tiles' || params.has('gkey');
+const urlKey = params.get('gkey');
+if (urlKey) {
+  localStorage.setItem('fahad_atc_gkey', urlKey);
+}
+const apiKey = urlKey || localStorage.getItem('fahad_atc_gkey');
+
+let tilesAirport = null;
+if (wantTiles && apiKey) {
+  try {
+    tilesAirport = buildAirportTiles({ parent: tabletop, apiKey, camera, renderer });
+    // Hide OSM buildings + satellite ground — the photoreal tiles already
+    // show those. Keep runway centerlines as ATC overlays.
+    setOSMOverlaysVisible(airport, false);
+    document.getElementById('google-credit')?.style.setProperty('display', 'block');
+  } catch (err) {
+    console.error('[tiles] init failed, falling back to OSM:', err);
+    tilesAirport = null;
+  }
+}
+
+// URL params drive feed and airport-renderer selection.
 const params = new URLSearchParams(location.search);
 const snapshotName = params.get('snapshot');
 let traffic;
@@ -125,5 +149,6 @@ renderer.setAnimationLoop((time, frame) => {
   if (!renderer.xr.isPresenting) orbit.update();
   interaction.update(frame);
   traffic.update(dt);
+  if (tilesAirport) tilesAirport.update();
   renderer.render(scene, camera);
 });

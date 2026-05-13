@@ -36,7 +36,10 @@ export async function buildAirport() {
   // Layer 0: cached satellite imagery (Esri World Imagery)
   try {
     const sat = await loadSatelliteGround();
-    if (sat) root.add(sat);
+    if (sat) {
+      sat.userData.kind = 'satellite-ground';
+      root.add(sat);
+    }
   } catch (err) {
     console.warn('[airport] satellite ground unavailable, falling back to OSM polygons:', err);
     // Fallback: draw aerodrome boundary + aprons from OSM as before
@@ -99,6 +102,7 @@ export async function buildAirport() {
     const m = makeBuilding(t.geometry, 0x6e7e9a, h);
     if (m) {
       m.userData.terminal = t.tags.name || t.tags.ref;
+      m.userData.kind = 'osm-building';
       root.add(m);
     }
   }
@@ -107,10 +111,24 @@ export async function buildAirport() {
   for (const h of byTag('hangar')) {
     const ht = inferBuildingHeight(h.tags, 14) * SCALE;
     const m = makeBuilding(h.geometry, 0x7a7a82, ht);
-    if (m) root.add(m);
+    if (m) {
+      m.userData.kind = 'osm-building';
+      root.add(m);
+    }
   }
 
   return root;
+}
+
+// Toggle visibility of OSM-derived features that overlap with Google Photoreal
+// Tiles. Runway/taxiway centerlines stay visible as ATC accents.
+export function setOSMOverlaysVisible(airportRoot, visible) {
+  airportRoot.traverse((obj) => {
+    const k = obj.userData?.kind;
+    if (k === 'satellite-ground' || k === 'osm-building') {
+      obj.visible = visible;
+    }
+  });
 }
 
 function inferBuildingHeight(tags, fallbackM) {

@@ -12,11 +12,12 @@
     "deploy": "vite build && gh-pages -d dist"
   },
   "dependencies": {
-    "three": "^0.163.0"
+    "3d-tiles-renderer": "^0.4.24",
+    "three": "^0.184.0"
   },
   "devDependencies": {
+    "gh-pages": "^6.1.1",
     "vite": "^5.2.0",
-    "vite-plugin-mkcert": "^1.17.5",
-    "gh-pages": "^6.1.1"
+    "vite-plugin-mkcert": "^1.17.5"
   }
 }

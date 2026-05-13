@@ -25,6 +25,10 @@ Models are scaled at runtime to match real ICAO-type dimensions and tinted with 
 
 For commercial deployment, use a licensed Esri ArcGIS account or another provider (Mapbox, MapTiler, Google Maps Platform).
 
+## Photoreal 3D Tiles (optional mode)
+
+When the `?airport=tiles` URL flag is set with a Google Maps API key, the airport ground/buildings are rendered from **Google Photorealistic 3D Tiles** via the [Map Tiles API](https://developers.google.com/maps/documentation/tile/3d-tiles). Free tier of Google Maps Platform covers a generous monthly quota; attribution `Imagery © Google · Map Tiles API` is shown in the bottom-left corner whenever the tiles are active, per Google's terms of service.
+
 ## Code
 
 Project source code is unlicensed — see repository root for terms when added.
