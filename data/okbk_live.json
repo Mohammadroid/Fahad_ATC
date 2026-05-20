@@ -1,7 +1,7 @@
 {
   "source": "opensky-live",
-  "time_unix": 1779280734,
-  "time_iso": "2026-05-20T12:38:54.000Z",
+  "time_unix": 1779298200,
+  "time_iso": "2026-05-20T17:30:00.000Z",
   "bbox": {
     "lamin": 22,
     "lomin": 46,
@@ -13,94 +13,80 @@
     "lon": 47.9689
   },
   "counts": {
-    "total": 6,
+    "total": 5,
     "near_50nm": 0,
-    "distant": 6
+    "distant": 5
   },
   "aircraft": [
     {
-      "icao24": "06a112",
-      "callsign": "QTR53W",
+      "icao24": "06a2b6",
+      "callsign": "QTR56L",
       "type": "",
       "state": "AIRBORNE_IN",
-      "lat": 26.4798,
-      "lon": 48.8634,
+      "lat": 26.4569,
+      "lon": 48.5935,
       "alt": 33000,
-      "hdg": 88,
-      "speed_kt": 564,
+      "hdg": 85,
+      "speed_kt": 544,
       "vrate_fpm": 0,
       "on_ground": false,
-      "dist_nm": 172
+      "dist_nm": 170
     },
     {
-      "icao24": "06a100",
-      "callsign": "QTR92J",
+      "icao24": "894094",
+      "callsign": "GFA708",
       "type": "",
       "state": "AIRBORNE_IN",
-      "lat": 26.4428,
-      "lon": 48.9597,
-      "alt": 29125,
+      "lat": 26.451,
+      "lon": 49.7601,
+      "alt": 7200,
       "hdg": 89,
-      "speed_kt": 559,
-      "vrate_fpm": 0,
+      "speed_kt": 345,
+      "vrate_fpm": -1024,
       "on_ground": false,
-      "dist_nm": 175
+      "dist_nm": 191
     },
     {
-      "icao24": "06a125",
-      "callsign": "QTR780",
-      "type": "",
-      "state": "AIRBORNE_IN",
-      "lat": 26.4908,
-      "lon": 49.416,
-      "alt": 17950,
-      "hdg": 89,
-      "speed_kt": 563,
-      "vrate_fpm": 0,
-      "on_ground": false,
-      "dist_nm": 181
-    },
-    {
-      "icao24": "717ccb",
-      "callsign": "KNE719",
+      "icao24": "717ca2",
+      "callsign": "SVA1125",
       "type": "",
       "state": "AIRBORNE_OUT",
-      "lat": 26.147,
-      "lon": 48.3254,
-      "alt": 28900,
-      "hdg": 256,
-      "speed_kt": 427,
-      "vrate_fpm": 1152,
+      "lat": 25.9844,
+      "lon": 48.6264,
+      "alt": 25600,
+      "hdg": 241,
+      "speed_kt": 405,
+      "vrate_fpm": 1344,
       "on_ground": false,
-      "dist_nm": 186
+      "dist_nm": 198
     },
     {
-      "icao24": "06a1de",
-      "callsign": "QQE219",
+      "icao24": "3c64c5",
+      "callsign": "DLH756",
       "type": "",
       "state": "AIRBORNE_IN",
-      "lat": 26.4965,
-      "lon": 49.7336,
-      "alt": 5200,
-      "hdg": 90,
-      "speed_kt": 562,
-      "vrate_fpm": 65,
-      "on_ground": false,
-      "dist_nm": 188
-    },
-    {
-      "icao24": "8940a3",
-      "callsign": "GFA134",
-      "type": "",
-      "state": "AIRBORNE_IN",
-      "lat": 26.2778,
-      "lon": 50.9869,
-      "alt": 33000,
-      "hdg": 116,
-      "speed_kt": 408,
+      "lat": 22.4606,
+      "lon": 50.1923,
+      "alt": 37000,
+      "hdg": 105,
+      "speed_kt": 449,
       "vrate_fpm": 0,
       "on_ground": false,
-      "dist_nm": 238
+      "dist_nm": 423
+    },
+    {
+      "icao24": "896459",
+      "callsign": "UAE6FJ",
+      "type": "",
+      "state": "AIRBORNE_IN",
+      "lat": 22.8401,
+      "lon": 52.4359,
+      "alt": 41000,
+      "hdg": 100,
+      "speed_kt": 510,
+      "vrate_fpm": 0,
+      "on_ground": false,
+      "dist_nm": 450
     }
   ]
 }
