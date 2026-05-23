@@ -139,9 +139,6 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
 
     // 2) Grab transform updates
     updateGrabs();
-
-    // 3) Keep the selected aircraft's path attached + tracking position
-    maybeUpdateSelectedPath();
   }
 
   // -----------------------------------------------------------
@@ -270,10 +267,15 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
     ring.scale.setScalar(on ? 1.45 : 1.0);
   }
 
-  // Show the flight path for an aircraft. Rebuilt each time so it reflects
-  // the aircraft's current 3-D position (start/end attach to the aircraft).
+  // Show the flight path for an aircraft. Built ONCE at selection time and
+  // left fixed thereafter — the aircraft moves through the pre-computed
+  // route rather than the route following the aircraft.
   function showFlightPath(ac) {
-    rebuildFlightPath(ac);
+    hideFlightPath(ac); // clear any prior path
+    const path = buildFlightPath(ac);
+    if (!path) return;
+    ac.userData.flightPath = path;
+    ac.parent?.add(path);
   }
   function hideFlightPath(ac) {
     const path = ac.userData?.flightPath;
@@ -282,29 +284,6 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
       disposeFlightPath(path);
       ac.userData.flightPath = null;
     }
-  }
-  function rebuildFlightPath(ac) {
-    const old = ac.userData?.flightPath;
-    if (old) {
-      old.parent?.remove(old);
-      disposeFlightPath(old);
-      ac.userData.flightPath = null;
-    }
-    const fresh = buildFlightPath(ac);
-    if (!fresh) return;
-    ac.userData.flightPath = fresh;
-    ac.parent?.add(fresh);
-  }
-
-  // Per-frame path rebuild for the selected aircraft, throttled to 5 Hz so
-  // it tracks any movement (the sandbox simulator animates aircraft).
-  let _lastPathRebuild = 0;
-  function maybeUpdateSelectedPath() {
-    if (!selected) return;
-    const now = performance.now();
-    if (now - _lastPathRebuild < 200) return;
-    _lastPathRebuild = now;
-    rebuildFlightPath(selected);
   }
 
   // -----------------------------------------------------------
