@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { getAirlineName, getTypeName, getAirlineAccent, STATES } from './aircraft.js';
 import { SCALE } from './airport.js';
+import { buildFlightPath } from './flightpath.js';
 
 // Pinch + laser-pointer interactions:
 //   • Each hand emits a 3 m laser ray from its targetRay (along the pinch axis).
@@ -234,12 +235,15 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
   }
 
   // -----------------------------------------------------------
-  // Aircraft selection (toggle on re-pinch)
+  // Aircraft selection (toggle on re-pinch). Selecting an aircraft pops the
+  // flight-strip card AND draws its past trail + projected path. Re-pinching
+  // the same aircraft (or clicking another) hides them.
   function toggleSelect(ac) {
     if (selected === ac) { deselect(); return; }
     if (selected) deselect();
     selected = ac;
     setHighlight(ac, true);
+    showFlightPath(ac);
     redrawCard(ac.userData);
     positionCardForAircraft(ac);
     card.visible = true;
@@ -247,6 +251,7 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
   function deselect() {
     if (!selected) return;
     setHighlight(selected, false);
+    hideFlightPath(selected);
     selected = null;
     card.visible = false;
   }
@@ -260,13 +265,24 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
     if (!ring) return;
     ring.material.opacity = on ? 0.95 : 0.55;
     ring.scale.setScalar(on ? 1.45 : 1.0);
-    // Also brighten the path on selection
-    const path = group.userData?.flightPath;
-    if (path) {
-      path.traverse((c) => {
-        if (c.material) c.material.opacity = on ? Math.min(1, (c.material.opacity || 0.5) + 0.3) : c.material.opacity;
-      });
+  }
+
+  // Build the flight path lazily on first selection and cache on the aircraft.
+  // The path is parented to whatever the aircraft is parented to (the tabletop),
+  // so it scales/rotates with the airport.
+  function showFlightPath(ac) {
+    let path = ac.userData.flightPath;
+    if (!path) {
+      path = buildFlightPath(ac);
+      if (!path) return;
+      ac.userData.flightPath = path;
+      ac.parent?.add(path);
     }
+    path.visible = true;
+  }
+  function hideFlightPath(ac) {
+    const path = ac.userData?.flightPath;
+    if (path) path.visible = false;
   }
 
   // -----------------------------------------------------------

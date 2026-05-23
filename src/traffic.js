@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { SCALE } from './airport.js';
 import { buildAircraftGroup } from './aircraft.js';
-import { buildFlightPath } from './flightpath.js';
 
 // Sandbox fleet — representative mix of Kuwait-region carriers and states.
 const FLEET = [
@@ -33,13 +32,6 @@ export class TrafficSimulator {
       (Math.random() - 0.5) * TABLE_HALF_Z * 1.6
     );
     this.parent.add(group);
-
-    // Always-on flight path overlay for airborne sandbox aircraft.
-    const path = buildFlightPath(group);
-    if (path) {
-      this.parent.add(path);
-      group.userData.flightPath = path;
-    }
     return group;
   }
 
