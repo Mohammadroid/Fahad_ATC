@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { getAirlineName, getTypeName, getAirlineAccent, STATES } from './aircraft.js';
 import { SCALE } from './airport.js';
-import { buildFlightPath } from './flightpath.js';
+import { buildFlightPath, disposeFlightPath } from './flightpath.js';
 
 // Pinch + laser-pointer interactions:
 //   • Each hand emits a 3 m laser ray from its targetRay (along the pinch axis).
@@ -139,6 +139,9 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
 
     // 2) Grab transform updates
     updateGrabs();
+
+    // 3) Keep the selected aircraft's path attached + tracking position
+    maybeUpdateSelectedPath();
   }
 
   // -----------------------------------------------------------
@@ -267,22 +270,41 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
     ring.scale.setScalar(on ? 1.45 : 1.0);
   }
 
-  // Build the flight path lazily on first selection and cache on the aircraft.
-  // The path is parented to whatever the aircraft is parented to (the tabletop),
-  // so it scales/rotates with the airport.
+  // Show the flight path for an aircraft. Rebuilt each time so it reflects
+  // the aircraft's current 3-D position (start/end attach to the aircraft).
   function showFlightPath(ac) {
-    let path = ac.userData.flightPath;
-    if (!path) {
-      path = buildFlightPath(ac);
-      if (!path) return;
-      ac.userData.flightPath = path;
-      ac.parent?.add(path);
-    }
-    path.visible = true;
+    rebuildFlightPath(ac);
   }
   function hideFlightPath(ac) {
     const path = ac.userData?.flightPath;
-    if (path) path.visible = false;
+    if (path) {
+      path.parent?.remove(path);
+      disposeFlightPath(path);
+      ac.userData.flightPath = null;
+    }
+  }
+  function rebuildFlightPath(ac) {
+    const old = ac.userData?.flightPath;
+    if (old) {
+      old.parent?.remove(old);
+      disposeFlightPath(old);
+      ac.userData.flightPath = null;
+    }
+    const fresh = buildFlightPath(ac);
+    if (!fresh) return;
+    ac.userData.flightPath = fresh;
+    ac.parent?.add(fresh);
+  }
+
+  // Per-frame path rebuild for the selected aircraft, throttled to 5 Hz so
+  // it tracks any movement (the sandbox simulator animates aircraft).
+  let _lastPathRebuild = 0;
+  function maybeUpdateSelectedPath() {
+    if (!selected) return;
+    const now = performance.now();
+    if (now - _lastPathRebuild < 200) return;
+    _lastPathRebuild = now;
+    rebuildFlightPath(selected);
   }
 
   // -----------------------------------------------------------
