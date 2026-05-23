@@ -25,8 +25,9 @@ jobs:
 
       - run: npm ci
 
-      - name: Fetch live OpenSky snapshot (soft-fail on transient errors)
+      - name: Fetch live snapshot (FR24 → OpenSky fallback, soft-fail)
         env:
+          FR24_TOKEN:   ${{ secrets.FR24_TOKEN }}
           OPENSKY_USER: ${{ secrets.OPENSKY_USER }}
           OPENSKY_PASS: ${{ secrets.OPENSKY_PASS }}
         run: node scripts/fetch-live.mjs
