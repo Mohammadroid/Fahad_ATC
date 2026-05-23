@@ -7,6 +7,12 @@ import { buildAirportTiles } from './airport_tiles.js';
 import { TrafficSimulator } from './traffic.js';
 import { SnapshotPlayer } from './feeds/snapshot.js';
 import { setupInteraction } from './interaction.js';
+import { SpatialPanel, drawFlightList, drawClock } from './panels.js';
+import { getAirlineAccent } from './aircraft.js';
+
+// URL params drive feed and airport-renderer selection.
+const params = new URLSearchParams(location.search);
+const snapshotName = params.get('snapshot');
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
@@ -42,22 +48,18 @@ tabletop.add(base);
 const airport = await buildAirport();
 tabletop.add(airport);
 
-// Photoreal Google 3D Tiles mode: `?airport=tiles` URL param + a Google Maps
-// API key with the "Map Tiles API" enabled. Key can be passed once via
-// `?gkey=KEY` (persisted to localStorage) or set in localStorage directly.
+// Photoreal Google 3D Tiles mode: `?airport=tiles` + a Google Maps API key
+// with the "Map Tiles API" enabled. Key persists to localStorage after first
+// visit via `?gkey=KEY`.
 const wantTiles = params.get('airport') === 'tiles' || params.has('gkey');
 const urlKey = params.get('gkey');
-if (urlKey) {
-  localStorage.setItem('fahad_atc_gkey', urlKey);
-}
+if (urlKey) localStorage.setItem('fahad_atc_gkey', urlKey);
 const apiKey = urlKey || localStorage.getItem('fahad_atc_gkey');
 
 let tilesAirport = null;
 if (wantTiles && apiKey) {
   try {
     tilesAirport = buildAirportTiles({ parent: tabletop, apiKey, camera, renderer });
-    // Hide OSM buildings + satellite ground — the photoreal tiles already
-    // show those. Keep runway centerlines as ATC overlays.
     setOSMOverlaysVisible(airport, false);
     document.getElementById('google-credit')?.style.setProperty('display', 'block');
   } catch (err) {
@@ -66,9 +68,7 @@ if (wantTiles && apiKey) {
   }
 }
 
-// URL params drive feed and airport-renderer selection.
-const params = new URLSearchParams(location.search);
-const snapshotName = params.get('snapshot');
+// Traffic source
 let traffic;
 let statusText = 'Simulator (animated)';
 if (snapshotName) {
@@ -110,7 +110,7 @@ scene.add(ctrl1);
 function makeLaserBeam() {
   const geo = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(0, 0, 0),
-    new THREE.Vector3(0, 0, -3), // 3 m forward along controller -Z
+    new THREE.Vector3(0, 0, -3),
   ]);
   const mat = new THREE.LineBasicMaterial({
     color: 0x4a9eff, transparent: true, opacity: 0.45, depthTest: false,
@@ -126,6 +126,85 @@ const interaction = setupInteraction({
   controllers: [ctrl0, ctrl1],
   traffic,
 });
+
+// -----------------------------------------------------------------------
+// Floating panels (inbound list, outbound list, clock). Each is grabbable +
+// scalable via the same pinch gestures as the tabletop.
+
+const ATC_BLUE   = '#4499ff';
+const ATC_ORANGE = '#ff8844';
+
+const inboundPanel = new SpatialPanel({
+  name: 'inbound',
+  width: 0.42, height: 0.62, canvasW: 560, canvasH: 820,
+  anchor: new THREE.Vector3(-0.95, 1.35, -0.9),
+  faceTarget: new THREE.Vector3(0, 1.4, 0),
+});
+scene.add(inboundPanel.group);
+interaction.registerGrabbable(inboundPanel.group, {
+  surfaces: [inboundPanel.mesh], kind: 'panel', minScale: 0.4, maxScale: 3.0,
+});
+
+const outboundPanel = new SpatialPanel({
+  name: 'outbound',
+  width: 0.42, height: 0.62, canvasW: 560, canvasH: 820,
+  anchor: new THREE.Vector3(0.95, 1.35, -0.9),
+  faceTarget: new THREE.Vector3(0, 1.4, 0),
+});
+scene.add(outboundPanel.group);
+interaction.registerGrabbable(outboundPanel.group, {
+  surfaces: [outboundPanel.mesh], kind: 'panel', minScale: 0.4, maxScale: 3.0,
+});
+
+const clockPanel = new SpatialPanel({
+  name: 'clock',
+  width: 0.30, height: 0.20, canvasW: 600, canvasH: 400,
+  anchor: new THREE.Vector3(0, 1.95, -1.15),
+  faceTarget: new THREE.Vector3(0, 1.6, 0),
+});
+scene.add(clockPanel.group);
+interaction.registerGrabbable(clockPanel.group, {
+  surfaces: [clockPanel.mesh], kind: 'panel', minScale: 0.4, maxScale: 3.0,
+});
+
+function refreshPanels() {
+  const now = performance.now();
+
+  if (clockPanel.shouldRedraw(now, 250)) {
+    clockPanel.redraw((ctx, w, h) => drawClock(ctx, w, h));
+  }
+
+  if (inboundPanel.shouldRedraw(now, 2000)) {
+    const inbounds = traffic.aircraft
+      .map((g) => g.userData)
+      .filter((d) => d && d.state === 'AIRBORNE_IN')
+      .sort((a, b) => (a.dist_nm ?? 9999) - (b.dist_nm ?? 9999));
+    inboundPanel.redraw((ctx, w, h) =>
+      drawFlightList(ctx, w, h, {
+        title: 'INBOUND',
+        flights: inbounds,
+        accentHex: ATC_BLUE,
+        headerSubtitle: `${inbounds.length} aircraft on approach`,
+      })
+    );
+  }
+
+  if (outboundPanel.shouldRedraw(now, 2000)) {
+    const outbounds = traffic.aircraft
+      .map((g) => g.userData)
+      .filter((d) => d && (d.state === 'AIRBORNE_OUT' || d.state === 'CLEARED' || d.state === 'QUEUED'));
+    outboundPanel.redraw((ctx, w, h) =>
+      drawFlightList(ctx, w, h, {
+        title: 'OUTBOUND',
+        flights: outbounds,
+        accentHex: ATC_ORANGE,
+        headerSubtitle: `${outbounds.length} aircraft departing`,
+      })
+    );
+  }
+}
+// Prime the panels once so they aren't blank for the first 2 s.
+refreshPanels();
 
 // Desktop preview controls (only used outside XR)
 const orbit = new OrbitControls(camera, renderer.domElement);
@@ -143,12 +222,13 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-const clock = new THREE.Clock();
+const clk = new THREE.Clock();
 renderer.setAnimationLoop((time, frame) => {
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const dt = Math.min(clk.getDelta(), 0.05);
   if (!renderer.xr.isPresenting) orbit.update();
   interaction.update(frame);
   traffic.update(dt);
   if (tilesAirport) tilesAirport.update();
+  refreshPanels();
   renderer.render(scene, camera);
 });

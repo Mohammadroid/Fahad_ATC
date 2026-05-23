@@ -1,22 +1,20 @@
 import * as THREE from 'three';
 import { getAirlineName, getTypeName, getAirlineAccent, STATES } from './aircraft.js';
-import { buildFlightPath } from './flightpath.js';
 import { SCALE } from './airport.js';
 
 // Pinch + laser-pointer interactions:
 //   • Each hand emits a 3 m laser ray from its targetRay (along the pinch axis).
-//   • Per frame: raycast each laser against aircraft and the tabletop base.
-//     The hit aircraft / hit point gets a cursor dot and subtle hover highlight.
-//   • Pinch (selectstart):
-//       - Laser hit on aircraft → toggle selection (re-pinch the same one
-//         deselects it and hides its card + flight path).
-//       - Laser hit on tabletop OR direct touch on tabletop → grab.
-//       - Direct touch on aircraft (≤6 cm) → select (legacy fallback).
-//   • Grabbing: one hand = translate; two hands = scale + yaw + translate
-//     around the midpoint between the two hands.
+//   • Per-frame: raycast each laser against aircraft and any registered
+//     grabbable (the tabletop and any floating panels). Cursor dot lights up
+//     on whatever the laser is pointing at.
+//   • Pinch on aircraft → toggle selection / card visibility.
+//   • Pinch on a grabbable → start a grab on that grabbable. One hand = drag;
+//     two hands on the same grabbable = scale + yaw + translate around the
+//     midpoint between the two hands.
+//   • First pinch in AR with the placement reticle visible places the tabletop
+//     onto your real table (hit-test on detected surfaces).
 //
-// Caller drives update() from the render loop so per-frame ray-targeting,
-// hover state, cursor positions and tabletop transforms all stay in sync.
+// Caller drives update(frame) from the render loop.
 
 const NM_TO_M = 1852;
 
@@ -27,18 +25,44 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
   card.visible = false;
   let selected = null;
 
-  // ----- tabletop grab state -----
-  const grabs = new Set(); // active hands grabbing the tabletop
-  let grabState = null;
+  // ----- grabbable registry -----
+  // Each entry: { group, surfaces[], minScale, maxScale, kind, onGrabStart, onGrabEnd }
+  const grabbables = [];
+  // Per-group active grab: { hands: Set, state: {handPositions, initialMatrix} | null }
+  const activeGrabs = new Map();
+
   const base = tabletop.getObjectByName('tabletop-base');
   const baseOriginalEmissive = base?.material?.emissive?.clone();
 
-  // ----- laser-pointer cursors -----
+  // Register the tabletop as a grabbable
+  registerGrabbable(tabletop, {
+    surfaces: base ? [base] : [],
+    kind: 'tabletop',
+    minScale: 0.25, maxScale: 4.0,
+    onGrabStart: () => setGrabFeedback(base, true, 0x2a4a78),
+    onGrabEnd:   () => setGrabFeedback(base, false),
+  });
+
+  function registerGrabbable(group, options = {}) {
+    const entry = {
+      group,
+      surfaces: options.surfaces || [],
+      kind: options.kind || 'object',
+      minScale: options.minScale ?? 0.3,
+      maxScale: options.maxScale ?? 3.5,
+      onGrabStart: options.onGrabStart || null,
+      onGrabEnd:   options.onGrabEnd   || null,
+    };
+    group.userData.grabbable = true;
+    group.userData.grabKind = entry.kind;
+    grabbables.push(entry);
+    return entry;
+  }
+
+  // ----- laser cursors -----
   const cursors = controllers.map(() => makeCursor());
   for (const c of cursors) scene.add(c);
-
-  // ----- per-frame ray hover -----
-  let hovers = controllers.map(() => null); // {type, target, point} per controller
+  let hovers = controllers.map(() => null);
 
   // ----- hit-test placement (AR-only) -----
   const reticle = makeReticle();
@@ -54,15 +78,13 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
       try {
         const viewerSpace = await session.requestReferenceSpace('viewer');
         hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
-        // Hide the tabletop until the user picks a surface to place it on.
         savedTabletopPos = tabletop.position.clone();
         tabletop.visible = false;
         placedOnSurface = false;
       } catch (err) {
-        console.warn('[xr] hit-test unavailable, using default placement:', err);
+        console.warn('[xr] hit-test unavailable:', err);
       }
     });
-
     renderer.xr.addEventListener('sessionend', () => {
       hitTestSource = null;
       reticle.visible = false;
@@ -82,7 +104,7 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
   // -----------------------------------------------------------
   // Per-frame loop driver
   function update(frame) {
-    // 0) Hit-test placement reticle (AR-only, until first pinch on surface)
+    // 0) Hit-test placement reticle
     if (hitTestSource && frame && !placedOnSurface) {
       const refSpace = renderer.xr.getReferenceSpace();
       const hits = frame.getHitTestResults(hitTestSource);
@@ -97,7 +119,7 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
       }
     }
 
-    // 1) Update laser hits + cursors
+    // 1) Laser hits + cursors
     for (let i = 0; i < controllers.length; i++) {
       const hit = rayHit(controllers[i]);
       hovers[i] = hit;
@@ -105,26 +127,29 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
       if (hit) {
         cursor.position.copy(hit.point);
         cursor.visible = true;
-        cursor.material.color.setHex(hit.type === 'aircraft' ? 0xffd86b : 0x4a9eff);
+        cursor.material.color.setHex(
+          hit.type === 'aircraft' ? 0xffd86b :
+          hit.type === 'grabbable' ? 0x4a9eff : 0xffffff
+        );
       } else {
         cursor.visible = false;
       }
     }
 
-    // 2) Update tabletop grab transform
-    updateGrab();
+    // 2) Grab transform updates
+    updateGrabs();
   }
 
   // -----------------------------------------------------------
-  // Ray hit: returns {type, target, point} or null
+  // Ray hit detection: aircraft first, then any grabbable surface
   function rayHit(ctrl) {
     const origin = new THREE.Vector3();
     origin.setFromMatrixPosition(ctrl.matrixWorld);
     const direction = new THREE.Vector3(0, 0, -1).transformDirection(ctrl.matrixWorld);
-
     const FAR = 5;
-    // Aircraft: closest perpendicular distance to ray, within ~3° angular tolerance
-    let bestAc = null, bestPerp = Infinity, bestT = 0;
+
+    // Aircraft (perpendicular-distance test)
+    let bestAc = null, bestPerp = Infinity;
     for (const ac of traffic.aircraft) {
       const acPos = new THREE.Vector3();
       ac.getWorldPosition(acPos);
@@ -133,11 +158,8 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
       if (t < 0 || t > FAR) continue;
       const closest = origin.clone().addScaledVector(direction, t);
       const perp = closest.distanceTo(acPos);
-      // Angular tolerance: 5 cm at 1 m = ~3°; scale with distance for fairness.
       const tolerance = Math.max(0.04, t * 0.05);
-      if (perp < tolerance && perp < bestPerp) {
-        bestAc = ac; bestPerp = perp; bestT = t;
-      }
+      if (perp < tolerance && perp < bestPerp) { bestAc = ac; bestPerp = perp; }
     }
     if (bestAc) {
       const acPos = new THREE.Vector3();
@@ -145,44 +167,44 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
       return { type: 'aircraft', target: bestAc, point: acPos };
     }
 
-    // Tabletop base: actual mesh raycast
-    if (base) {
+    // Grabbable surfaces (tabletop base + panel meshes)
+    const allSurfaces = [];
+    for (const e of grabbables) allSurfaces.push(...e.surfaces);
+    if (allSurfaces.length > 0) {
       const raycaster = new THREE.Raycaster(origin, direction, 0, FAR);
-      const hits = raycaster.intersectObject(base, false);
-      if (hits.length > 0) return { type: 'tabletop', target: tabletop, point: hits[0].point };
+      const hits = raycaster.intersectObjects(allSurfaces, false);
+      if (hits.length > 0) {
+        const group = findGrabbableAncestor(hits[0].object);
+        if (group) return { type: 'grabbable', target: group, point: hits[0].point };
+      }
     }
     return null;
   }
 
   // -----------------------------------------------------------
-  // Pinch handlers (selectstart / selectend)
+  // Pinch handlers
   function onPinchStart(idx) {
-    const ctrl = controllers[idx];
     const hand = hands[idx];
     const hit = hovers[idx];
 
-    // 0. First-time AR placement: pinch with reticle visible drops the
-    //    tabletop onto the detected surface (your real table).
+    // 0. AR placement on real surface
     if (!placedOnSurface && reticle.visible) {
       const surfacePos = new THREE.Vector3();
       surfacePos.setFromMatrixPosition(reticle.matrix);
       tabletop.position.copy(surfacePos);
-      tabletop.rotation.set(0, tabletop.rotation.y, 0); // keep airport level
+      tabletop.rotation.set(0, tabletop.rotation.y, 0);
       tabletop.scale.setScalar(1);
       tabletop.updateMatrix();
       tabletop.visible = true;
       placedOnSurface = true;
       reticle.visible = false;
-      return; // consume this pinch — don't also trigger select/grab
-    }
-
-    // 1. Laser hit on aircraft → toggle select
-    if (hit?.type === 'aircraft') {
-      toggleSelect(hit.target);
       return;
     }
 
-    // 2. Direct touch fallback on aircraft (≤6 cm from index fingertip)
+    // 1. Aircraft via laser
+    if (hit?.type === 'aircraft') { toggleSelect(hit.target); return; }
+
+    // 2. Aircraft via direct touch
     const tip = handTipPos(hand);
     if (tip) {
       let nearest = null, nd = 0.06;
@@ -194,116 +216,125 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
       if (nearest) { toggleSelect(nearest); return; }
     }
 
-    // 3. Tabletop grab — laser-hit on table OR direct touch on table
-    if (hit?.type === 'tabletop' || (tip && isOnTabletop(tip))) {
-      grabs.add(hand);
-      snapshotGrab();
-      setGrabFeedback(true);
+    // 3. Grabbable via laser
+    if (hit?.type === 'grabbable' && hit.target) {
+      startGrab(hit.target, hand);
+      return;
+    }
+
+    // 4. Grabbable via direct touch (tabletop only, panels handled by laser)
+    if (tip && isOnTabletop(tip)) {
+      startGrab(tabletop, hand);
     }
   }
 
   function onPinchEnd(idx) {
     const hand = hands[idx];
-    if (!grabs.has(hand)) return;
-    grabs.delete(hand);
-    if (grabs.size > 0) snapshotGrab();
-    else { grabState = null; setGrabFeedback(false); }
+    endGrab(hand);
   }
 
   // -----------------------------------------------------------
   // Aircraft selection (toggle on re-pinch)
   function toggleSelect(ac) {
-    if (selected === ac) {
-      deselect();
-      return;
-    }
+    if (selected === ac) { deselect(); return; }
     if (selected) deselect();
     selected = ac;
     setHighlight(ac, true);
-    showFlightPath(ac);
     redrawCard(ac.userData);
     positionCardForAircraft(ac);
     card.visible = true;
   }
-
   function deselect() {
     if (!selected) return;
     setHighlight(selected, false);
-    hideFlightPath(selected);
     selected = null;
     card.visible = false;
   }
-
   function positionCardForAircraft(ac) {
     const p = new THREE.Vector3();
     ac.getWorldPosition(p);
-    // Place card to the upper-right of the aircraft, in world space.
     card.position.copy(p).add(new THREE.Vector3(0.20, 0.14, 0));
   }
-
   function setHighlight(group, on) {
     const ring = group.userData?.stateRing;
     if (!ring) return;
     ring.material.opacity = on ? 0.95 : 0.55;
     ring.scale.setScalar(on ? 1.45 : 1.0);
-  }
-
-  function showFlightPath(ac) {
-    if (!ac.userData.flightPath) {
-      const path = buildFlightPath(ac);
-      if (!path) return;
-      ac.userData.flightPath = path;
-      tabletop.add(path);
+    // Also brighten the path on selection
+    const path = group.userData?.flightPath;
+    if (path) {
+      path.traverse((c) => {
+        if (c.material) c.material.opacity = on ? Math.min(1, (c.material.opacity || 0.5) + 0.3) : c.material.opacity;
+      });
     }
-    ac.userData.flightPath.visible = true;
-  }
-
-  function hideFlightPath(ac) {
-    if (ac.userData.flightPath) ac.userData.flightPath.visible = false;
   }
 
   // -----------------------------------------------------------
-  // Tabletop grab (drag / scale / yaw)
-  function isOnTabletop(worldPos) {
-    const local = tabletop.worldToLocal(worldPos.clone());
-    return Math.abs(local.x) < 0.85 && Math.abs(local.z) < 0.85 && Math.abs(local.y) < 0.20;
+  // Grab system (works for any registered grabbable)
+  function startGrab(group, hand) {
+    let g = activeGrabs.get(group);
+    if (!g) {
+      g = { hands: new Set(), state: null };
+      activeGrabs.set(group, g);
+      const entry = grabbables.find((e) => e.group === group);
+      entry?.onGrabStart?.();
+    }
+    g.hands.add(hand);
+    snapshotGrab(group, g);
   }
 
-  function snapshotGrab() {
-    const handPositions = [];
-    for (const hand of grabs) {
-      const p = handTipPos(hand);
-      if (p) handPositions.push(p);
-    }
-    if (handPositions.length === 0) { grabState = null; return; }
-    tabletop.updateMatrix();
-    grabState = {
-      handPositions,
-      initialMatrix: tabletop.matrix.clone(),
-    };
-  }
-
-  function updateGrab() {
-    if (!grabState) return;
-    const currentPositions = [];
-    for (const hand of grabs) {
-      const p = handTipPos(hand);
-      if (p) currentPositions.push(p);
-    }
-    if (currentPositions.length !== grabState.handPositions.length) {
-      snapshotGrab();
+  function endGrab(hand) {
+    for (const [group, g] of activeGrabs) {
+      if (!g.hands.has(hand)) continue;
+      g.hands.delete(hand);
+      if (g.hands.size === 0) {
+        activeGrabs.delete(group);
+        const entry = grabbables.find((e) => e.group === group);
+        entry?.onGrabEnd?.();
+      } else {
+        snapshotGrab(group, g);
+      }
       return;
     }
-    if (currentPositions.length === 0) return;
+  }
 
-    if (currentPositions.length === 1) {
-      const delta = currentPositions[0].clone().sub(grabState.handPositions[0]);
-      const M = grabState.initialMatrix.clone();
-      M.elements[12] += delta.x; M.elements[13] += delta.y; M.elements[14] += delta.z;
-      applyMatrix(M);
+  function snapshotGrab(group, g) {
+    const hps = [];
+    for (const hand of g.hands) {
+      const p = handTipPos(hand);
+      if (p) hps.push(p);
+    }
+    if (hps.length === 0) { g.state = null; return; }
+    group.updateMatrix();
+    g.state = { handPositions: hps, initialMatrix: group.matrix.clone() };
+  }
+
+  function updateGrabs() {
+    for (const [group, g] of activeGrabs) {
+      if (!g.state) continue;
+      const cps = [];
+      for (const hand of g.hands) {
+        const p = handTipPos(hand);
+        if (p) cps.push(p);
+      }
+      if (cps.length !== g.state.handPositions.length) { snapshotGrab(group, g); continue; }
+      if (cps.length === 0) continue;
+      applyGrabTransform(group, g, cps);
+    }
+    if (selected) positionCardForAircraft(selected);
+  }
+
+  function applyGrabTransform(group, g, cps) {
+    if (cps.length === 1) {
+      const delta = cps[0].clone().sub(g.state.handPositions[0]);
+      const M = g.state.initialMatrix.clone();
+      M.elements[12] += delta.x;
+      M.elements[13] += delta.y;
+      M.elements[14] += delta.z;
+      applyMatrix(group, M);
     } else {
-      const A0 = grabState.handPositions[0], B0 = grabState.handPositions[1];
-      const A1 = currentPositions[0],        B1 = currentPositions[1];
+      const A0 = g.state.handPositions[0], B0 = g.state.handPositions[1];
+      const A1 = cps[0], B1 = cps[1];
       const m0 = A0.clone().add(B0).multiplyScalar(0.5);
       const m1 = A1.clone().add(B1).multiplyScalar(0.5);
       const d0 = Math.max(A0.distanceTo(B0), 1e-4);
@@ -312,34 +343,37 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
       const v0 = B0.clone().sub(A0); v0.y = 0;
       const v1 = B1.clone().sub(A1); v1.y = 0;
       const yaw = Math.atan2(v1.x, v1.z) - Math.atan2(v0.x, v0.z);
-
       const T1 = new THREE.Matrix4().makeTranslation(m1.x, m1.y, m1.z);
-      const R = new THREE.Matrix4().makeRotationY(yaw);
-      const S = new THREE.Matrix4().makeScale(scaleRatio, scaleRatio, scaleRatio);
+      const R  = new THREE.Matrix4().makeRotationY(yaw);
+      const S  = new THREE.Matrix4().makeScale(scaleRatio, scaleRatio, scaleRatio);
       const Tn = new THREE.Matrix4().makeTranslation(-m0.x, -m0.y, -m0.z);
-      const M = T1.multiply(R).multiply(S).multiply(Tn).multiply(grabState.initialMatrix);
-      applyMatrix(M);
+      const M = T1.multiply(R).multiply(S).multiply(Tn).multiply(g.state.initialMatrix);
+      applyMatrix(group, M);
     }
-
-    if (selected) positionCardForAircraft(selected);
   }
 
-  function applyMatrix(M) {
-    M.decompose(tabletop.position, tabletop.quaternion, tabletop.scale);
-    const s = THREE.MathUtils.clamp(tabletop.scale.x, 0.25, 4.0);
-    tabletop.scale.setScalar(s);
-    tabletop.updateMatrix();
+  function applyMatrix(group, M) {
+    M.decompose(group.position, group.quaternion, group.scale);
+    const entry = grabbables.find((e) => e.group === group);
+    const s = THREE.MathUtils.clamp(group.scale.x, entry?.minScale ?? 0.3, entry?.maxScale ?? 3.5);
+    group.scale.setScalar(s);
+    group.updateMatrix();
   }
 
-  function setGrabFeedback(on) {
-    if (!base?.material) return;
+  function setGrabFeedback(mesh, on, colorHex = 0x2a4a78) {
+    if (!mesh?.material) return;
     if (on) {
-      base.material.emissive = new THREE.Color(0x2a4a78);
-      base.material.emissiveIntensity = 0.5;
+      mesh.material.emissive = new THREE.Color(colorHex);
+      mesh.material.emissiveIntensity = 0.5;
     } else {
-      base.material.emissive = baseOriginalEmissive ? baseOriginalEmissive.clone() : new THREE.Color(0x000000);
-      base.material.emissiveIntensity = 0;
+      mesh.material.emissive = baseOriginalEmissive ? baseOriginalEmissive.clone() : new THREE.Color(0);
+      mesh.material.emissiveIntensity = 0;
     }
+  }
+
+  function isOnTabletop(worldPos) {
+    const local = tabletop.worldToLocal(worldPos.clone());
+    return Math.abs(local.x) < 0.85 && Math.abs(local.z) < 0.85 && Math.abs(local.y) < 0.20;
   }
 
   function handTipPos(hand) {
@@ -350,17 +384,23 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
     return p;
   }
 
+  function findGrabbableAncestor(obj) {
+    let cur = obj;
+    while (cur) {
+      if (cur.userData?.grabbable) return cur;
+      cur = cur.parent;
+    }
+    return null;
+  }
+
   // -----------------------------------------------------------
-  // Card UI (rich layout)
+  // Card UI
   function makeCard() {
     const canvas = document.createElement('canvas');
     canvas.width = 600; canvas.height = 460;
     const tex = new THREE.CanvasTexture(canvas);
-    tex.minFilter = THREE.LinearFilter;
-    tex.anisotropy = 4;
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: tex, transparent: true, depthTest: false,
-    }));
+    tex.minFilter = THREE.LinearFilter; tex.anisotropy = 4;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
     sprite.scale.set(0.30, 0.23, 1);
     sprite.renderOrder = 20;
     sprite.userData = { canvas, tex };
@@ -371,49 +411,32 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
     const { canvas, tex } = card.userData;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Background
     ctx.fillStyle = 'rgba(10, 14, 22, 0.95)';
     roundRect(ctx, 0, 0, canvas.width, canvas.height, 16);
     ctx.fill();
     const accent = `#${getAirlineAccent(data.callsign).toString(16).padStart(6, '0')}`;
-    ctx.strokeStyle = accent;
-    ctx.lineWidth = 4;
-    ctx.stroke();
-
-    // Top state stripe
+    ctx.strokeStyle = accent; ctx.lineWidth = 4; ctx.stroke();
     const stateColor = stateHexColor(data.state);
     ctx.fillStyle = stateColor;
     ctx.fillRect(0, 0, canvas.width, 8);
-
-    // Header: callsign
     ctx.textBaseline = 'top';
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 56px ui-sans-serif, system-ui, sans-serif';
     ctx.fillText(data.callsign, 28, 26);
-
-    // Header: airline name
     const airline = getAirlineName(data.callsign);
     ctx.fillStyle = accent;
     ctx.font = '24px ui-sans-serif, system-ui, sans-serif';
-    ctx.fillText(airline || ' ', 28, 90);
-
-    // Divider
+    ctx.fillText(airline || ' ', 28, 90);
     ctx.strokeStyle = 'rgba(120,140,170,0.25)';
     ctx.lineWidth = 1;
     line(ctx, 28, 130, canvas.width - 28, 130);
-
-    // State badge + type
     ctx.fillStyle = stateColor;
     ctx.font = 'bold 28px ui-sans-serif, system-ui, sans-serif';
     ctx.fillText(String(data.state || '').replace('_', ' '), 28, 142);
-
     ctx.fillStyle = '#cbd5e1';
     ctx.font = '22px ui-sans-serif, system-ui, sans-serif';
     const typeName = getTypeName(data.type);
     ctx.fillText(`${typeName}${data.type ? `  (${data.type})` : ''}`, 28, 180);
-
-    // Telemetry rows
     const rowY0 = 220;
     const rows = [
       ['Heading',  `${data.hdg ?? '-'}°`],
@@ -433,21 +456,13 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
       ctx.font = '22px ui-sans-serif, system-ui, sans-serif';
       ctx.fillText(v, 180, y);
     });
-
-    // Divider
     line(ctx, 28, 360, canvas.width - 28, 360);
-
-    // Route + ETA
     ctx.fillStyle = '#7d8b9e';
     ctx.font = '20px ui-sans-serif, system-ui, sans-serif';
     ctx.fillText('Route', 28, 374);
-
     ctx.fillStyle = '#e6edf3';
     ctx.font = 'bold 24px ui-sans-serif, system-ui, sans-serif';
-    const routeText = `${data.origin || '?'}  →  ${data.destination || '?'}`;
-    ctx.fillText(routeText, 180, 372);
-
-    // ETA — only meaningful for inbound airborne
+    ctx.fillText(`${data.origin || '?'}  →  ${data.destination || '?'}`, 180, 372);
     const eta = computeEta(data);
     ctx.fillStyle = '#7d8b9e';
     ctx.font = '20px ui-sans-serif, system-ui, sans-serif';
@@ -455,7 +470,6 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
     ctx.fillStyle = '#e6edf3';
     ctx.font = 'bold 22px ui-sans-serif, system-ui, sans-serif';
     ctx.fillText(eta, 180, 414);
-
     tex.needsUpdate = true;
   }
 
@@ -463,7 +477,6 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
     if (data.state !== 'AIRBORNE_IN') return '—';
     const speed = data.speed_kt;
     if (!speed || speed < 50) return '—';
-    // Distance to OKBK in nm via lat/lon great-circle approximation
     const lat = data.lat, lon = data.lon;
     if (lat == null || lon == null) return '—';
     const cosLat = Math.cos(29.2266 * Math.PI / 180);
@@ -477,11 +490,11 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
     return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
   }
 
-  return { update };
+  return { update, registerGrabbable };
 }
 
 // -----------------------------------------------------------------------
-// Helpers (file-scope)
+// Helpers
 
 function makeCursor() {
   const m = new THREE.Mesh(
@@ -494,7 +507,6 @@ function makeCursor() {
 }
 
 function makeReticle() {
-  // Outer ring (pulse target) + inner cross hairs — visible against any surface.
   const g = new THREE.Group();
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(0.07, 0.085, 32).rotateX(-Math.PI / 2),
@@ -506,8 +518,7 @@ function makeReticle() {
   );
   ring.renderOrder = 26;
   dot.renderOrder = 27;
-  g.add(ring);
-  g.add(dot);
+  g.add(ring); g.add(dot);
   g.matrixAutoUpdate = false;
   g.visible = false;
   return g;
@@ -528,10 +539,7 @@ function stateHexColor(state) {
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
 function line(ctx, x0, y0, x1, y1) {
-  ctx.beginPath();
-  ctx.moveTo(x0, y0);
-  ctx.lineTo(x1, y1);
-  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
 }
 
 function roundRect(ctx, x, y, w, h, r) {

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { SCALE } from '../airport.js';
 import { buildAircraftGroup, getAirlineAccent, getAirlineName, STATES } from '../aircraft.js';
+import { buildFlightPath } from '../flightpath.js';
 
 // Loads a moment-in-time snapshot JSON (produced by scripts/fetch-snapshot.mjs,
 // scripts/fetch-live.mjs, or hand-authored) and places aircraft on the tabletop.
@@ -59,6 +60,14 @@ export class SnapshotPlayer {
     const altLift = data.alt > 0 ? 0.04 + Math.min(data.alt / 12000, 1.5) * 0.10 : 0.005;
     group.position.set(x, altLift, z);
     this.parent.add(group);
+
+    // Always-on flight path overlay (past trail + dotted projected line) for
+    // airborne aircraft. Skipped for ground aircraft inside buildFlightPath.
+    const path = buildFlightPath(group);
+    if (path) {
+      this.parent.add(path);
+      group.userData.flightPath = path;
+    }
     return group;
   }
 
