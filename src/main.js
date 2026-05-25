@@ -11,8 +11,12 @@ import { SpatialPanel, drawFlightList, drawClock } from './panels.js';
 import { getAirlineAccent } from './aircraft.js';
 
 // URL params drive feed and airport-renderer selection.
+// Default = okbk_live.json (real FR24 data). Pass ?snapshot=<other.json> to
+// override (e.g. example.json or okbk_today.json for curated scenarios), or
+// ?mode=sim to load the animated mock-traffic sandbox.
 const params = new URLSearchParams(location.search);
-const snapshotName = params.get('snapshot');
+const useSimulator = params.get('mode') === 'sim';
+const snapshotName = params.get('snapshot') || (useSimulator ? null : 'okbk_live.json');
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
@@ -70,26 +74,50 @@ if (wantTiles && apiKey) {
 
 // Traffic source
 let traffic;
-let statusText = 'Simulator (animated)';
 if (snapshotName) {
   try {
     traffic = await SnapshotPlayer.load(`${import.meta.env.BASE_URL}data/${snapshotName}`, tabletop);
-    const snap = traffic.snapshot;
-    const ts = snap?.time_iso ? new Date(snap.time_iso).toLocaleString() : '?';
-    const total = snap?.counts?.total ?? snap?.aircraft?.length ?? 0;
-    const near = snap?.counts?.near_50nm ?? '-';
-    const distant = snap?.counts?.distant ?? '-';
-    statusText = `${snap?.source || snapshotName} · ${ts} · ${total} aircraft (near ${near} / distant ${distant})`;
   } catch (err) {
-    console.error('[snapshot] load failed, falling back to simulator:', err);
+    console.error('[snapshot] load failed:', err);
     traffic = new TrafficSimulator(tabletop);
-    statusText = `Snapshot load failed → simulator`;
   }
 } else {
   traffic = new TrafficSimulator(tabletop);
 }
+
 const statusEl = document.getElementById('status-badge');
-if (statusEl) statusEl.textContent = `Source: ${statusText}`;
+function updateStatusBadge() {
+  if (!statusEl) return;
+  const snap = traffic.snapshot;
+  if (!snap) {
+    statusEl.textContent = 'Source: animated simulator (mock data). Drop ?mode=sim for live FR24 data.';
+    return;
+  }
+  const ts = snap.time_iso ? new Date(snap.time_iso) : null;
+  const ageSec = ts ? Math.round((Date.now() - ts.getTime()) / 1000) : null;
+  const ageStr = ageSec == null ? '?' : ageSec < 60 ? `${ageSec}s ago`
+                              : ageSec < 3600 ? `${Math.round(ageSec / 60)}m ago`
+                              : `${Math.round(ageSec / 3600)}h ago`;
+  const total = snap.counts?.total ?? snap.aircraft?.length ?? 0;
+  const near = snap.counts?.near_50nm ?? '-';
+  const distant = snap.counts?.distant ?? '-';
+  statusEl.textContent = `${snap.source || 'snapshot'} · ${ageStr} · ${total} aircraft (near ${near} / distant ${distant})`;
+}
+updateStatusBadge();
+// Refresh the age string every 5 s even between refetches
+setInterval(updateStatusBadge, 5000);
+
+// Browser-side polling: every 30 s ask the static JSON if it's been updated
+// by the cron. Replaces aircraft in place if the timestamp moved.
+if (traffic?.refresh) {
+  setInterval(async () => {
+    const changed = await traffic.refresh();
+    if (changed) {
+      console.log('[snapshot] refreshed with newer data');
+      updateStatusBadge();
+    }
+  }, 30000);
+}
 
 // Hand tracking + targetRay-space controllers (used for laser pointers)
 const handFactory = new XRHandModelFactory();

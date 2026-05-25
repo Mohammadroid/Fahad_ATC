@@ -22,16 +22,21 @@ const EDGE_RADIUS_W = 0.70;    // metres — table is 1.6 m wide so 0.7 m fits i
 
 export class SnapshotPlayer {
   static async load(url, parent) {
-    const res = await fetch(url);
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(`Snapshot fetch failed: ${res.status} ${res.statusText}`);
     const data = await res.json();
-    return new SnapshotPlayer(data, parent);
+    return new SnapshotPlayer(data, parent, url);
   }
 
-  constructor(snapshot, parent) {
+  constructor(snapshot, parent, url = null) {
     this.snapshot = snapshot;
     this.parent = parent;
+    this.url = url;
+    this.aircraft = [];
+    this._spawnAll(snapshot);
+  }
 
+  _spawnAll(snapshot) {
     // Pre-process: compute distance for each, sort by distance ascending so
     // we keep the closest distant aircraft if there are too many.
     const acs = (snapshot.aircraft || [])
@@ -43,7 +48,6 @@ export class SnapshotPlayer {
       .filter((a) => a._dist_nm > NEAR_RADIUS_NM && a._dist_nm <= FAR_RADIUS_NM)
       .slice(0, MAX_DISTANT_INDICATORS);
 
-    this.aircraft = [];
     for (const a of near) this.aircraft.push(this.spawnNear(a));
     for (const a of distant) this.aircraft.push(this.spawnDistant(a));
 
@@ -51,6 +55,40 @@ export class SnapshotPlayer {
       `[snapshot] ${this.aircraft.length} aircraft @ ${snapshot.time_iso || '?'} ` +
       `(near=${near.length} · distant=${distant.length})`
     );
+  }
+
+  // Re-fetch the snapshot URL and replace aircraft if the data changed.
+  // Returns true if a refresh happened (new timestamp), false otherwise.
+  async refresh() {
+    if (!this.url) return false;
+    let data;
+    try {
+      const res = await fetch(this.url, { cache: 'no-store' });
+      if (!res.ok) return false;
+      data = await res.json();
+    } catch {
+      return false;
+    }
+    const oldT = this.snapshot.time_unix;
+    const newT = data.time_unix;
+    if (oldT && newT && oldT === newT) return false; // unchanged
+    this._disposeAll();
+    this.snapshot = data;
+    this._spawnAll(data);
+    return true;
+  }
+
+  _disposeAll() {
+    for (const ac of this.aircraft) {
+      const path = ac.userData?.flightPath;
+      if (path) {
+        path.parent?.remove(path);
+        disposeRecursive(path);
+      }
+      this.parent.remove(ac);
+      disposeRecursive(ac);
+    }
+    this.aircraft = [];
   }
 
   spawnNear(data) {
@@ -157,6 +195,19 @@ function makeDistantLabel(data, accentHex) {
   sprite.scale.set(0.085, 0.026, 1);
   sprite.renderOrder = 12;
   return sprite;
+}
+
+function disposeRecursive(obj) {
+  obj.traverse((o) => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) {
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        if (m.map) m.map.dispose();
+        m.dispose();
+      }
+    }
+  });
 }
 
 function roundRect(ctx, x, y, w, h, r) {
