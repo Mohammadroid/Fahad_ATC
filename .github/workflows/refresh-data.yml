@@ -2,7 +2,7 @@ name: Refresh OKBK live data
 
 on:
   schedule:
-    - cron: '*/15 * * * *'   # every 15 min — keeps the live feed fresh
+    - cron: '*/5 * * * *'   # every 5 min — frequent enough for an active demo
   workflow_dispatch:
 
 permissions:

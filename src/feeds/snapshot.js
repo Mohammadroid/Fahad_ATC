@@ -15,10 +15,28 @@ const OKBK_LAT = 29.2266;
 const OKBK_LON = 47.9689;
 const COS_LAT = Math.cos(OKBK_LAT * Math.PI / 180);
 
-const NEAR_RADIUS_NM = 30;     // ≤ render as full aircraft on the table
-const FAR_RADIUS_NM  = 400;    // distant cap; further than this is ignored
+// Distance compression — aircraft within NEAR_RADIUS_KM (200 km ≈ 108 nm)
+// render as full aircraft using a piecewise-log scale so all of them fit on
+// the visible tabletop. Inside PIVOT_KM (the airport boundary) positions use
+// the regular 1/5000 airport scale so runway aircraft stay aligned with the
+// runways. Beyond that, distance compresses logarithmically to MAX_DISPLAY_W.
+//
+//   real km → display world units
+//     0   →  0
+//     1.75 → 0.35  (pivot — runway-extent radius at 1/5000)
+//     10  → ~0.378
+//     30  → ~0.408
+//     55  → ~0.503  (= 30 nm)
+//     100 → ~0.597
+//     200 → 0.75   (table edge)
+//
+const NEAR_RADIUS_KM = 200;       // ≤ this = full aircraft (compressed)
+const FAR_RADIUS_KM  = 750;       // ≤ this = edge chevron
 const MAX_DISTANT_INDICATORS = 18;
-const EDGE_RADIUS_W = 0.70;    // metres — table is 1.6 m wide so 0.7 m fits inside
+const EDGE_RADIUS_W  = 0.86;      // chevron ring, just outside the display area
+const PIVOT_KM       = 1.75;      // boundary where linear → log
+const PIVOT_W        = PIVOT_KM * 1000 / 5000;  // = 0.35 m world
+const MAX_DISPLAY_W  = 0.75;      // table edge for compressed range
 
 export class SnapshotPlayer {
   static async load(url, parent) {
@@ -40,12 +58,12 @@ export class SnapshotPlayer {
     // Pre-process: compute distance for each, sort by distance ascending so
     // we keep the closest distant aircraft if there are too many.
     const acs = (snapshot.aircraft || [])
-      .map((a) => ({ ...a, _dist_nm: a.dist_nm ?? distanceNm(a.lat, a.lon) }))
-      .sort((a, b) => a._dist_nm - b._dist_nm);
+      .map((a) => ({ ...a, _dist_km: distanceKm(a.lat, a.lon) }))
+      .sort((a, b) => a._dist_km - b._dist_km);
 
-    const near = acs.filter((a) => a._dist_nm <= NEAR_RADIUS_NM);
+    const near = acs.filter((a) => a._dist_km <= NEAR_RADIUS_KM);
     const distant = acs
-      .filter((a) => a._dist_nm > NEAR_RADIUS_NM && a._dist_nm <= FAR_RADIUS_NM)
+      .filter((a) => a._dist_km > NEAR_RADIUS_KM && a._dist_km <= FAR_RADIUS_KM)
       .slice(0, MAX_DISTANT_INDICATORS);
 
     for (const a of near) this.aircraft.push(this.spawnNear(a));
@@ -53,7 +71,7 @@ export class SnapshotPlayer {
 
     console.log(
       `[snapshot] ${this.aircraft.length} aircraft @ ${snapshot.time_iso || '?'} ` +
-      `(near=${near.length} · distant=${distant.length})`
+      `(near<200km=${near.length} · distant=${distant.length})`
     );
   }
 
@@ -93,7 +111,7 @@ export class SnapshotPlayer {
 
   spawnNear(data) {
     const group = buildAircraftGroup(data);
-    const { x, z } = latLonToTabletop(data.lat, data.lon);
+    const { x, z } = compressedTabletopPos(data.lat, data.lon);
     const altLift = data.alt > 0 ? 0.04 + Math.min(data.alt / 12000, 1.5) * 0.10 : 0.005;
     group.position.set(x, altLift, z);
     this.parent.add(group);
@@ -147,16 +165,34 @@ export class SnapshotPlayer {
   update(_dt) {}
 }
 
-function latLonToTabletop(lat, lon) {
-  const dxM = (lon - OKBK_LON) * 111320 * COS_LAT;
-  const dzM = -(lat - OKBK_LAT) * 111320;
-  return { x: dxM * SCALE, z: dzM * SCALE };
+// Piecewise distance compression: 1/5000 inside the airport boundary, then
+// logarithmic compression out to the table edge. See block comment above.
+function compressedDisplayDistance(realKm) {
+  if (realKm <= PIVOT_KM) {
+    return realKm * 1000 / 5000;
+  }
+  if (realKm >= NEAR_RADIUS_KM) return MAX_DISPLAY_W;
+  const t = (realKm - PIVOT_KM) / (NEAR_RADIUS_KM - PIVOT_KM); // 0..1
+  const logShaped = Math.log(1 + t * (Math.E - 1));            // 0..1
+  return PIVOT_W + (MAX_DISPLAY_W - PIVOT_W) * logShaped;
 }
 
-function distanceNm(lat, lon) {
+function compressedTabletopPos(lat, lon) {
   const dxKm = (lon - OKBK_LON) * 111.32 * COS_LAT;
   const dyKm = (lat - OKBK_LAT) * 111.32;
-  return Math.hypot(dxKm, dyKm) * 1000 / 1852;
+  const realKm = Math.hypot(dxKm, dyKm);
+  if (realKm < 1e-6) return { x: 0, z: 0 };
+  const dispW = compressedDisplayDistance(realKm);
+  // Unit bearing direction; +X = east in tabletop, -Z = north
+  const ux = dxKm / realKm;
+  const uy = dyKm / realKm;
+  return { x: ux * dispW, z: -uy * dispW };
+}
+
+function distanceKm(lat, lon) {
+  const dxKm = (lon - OKBK_LON) * 111.32 * COS_LAT;
+  const dyKm = (lat - OKBK_LAT) * 111.32;
+  return Math.hypot(dxKm, dyKm);
 }
 
 function bearingFromOKBK(lat, lon) {
@@ -181,7 +217,7 @@ function makeDistantLabel(data, accentHex) {
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   ctx.fillText(data.callsign, canvas.width / 2, 12);
 
-  const subtitle = `${Math.round(data._dist_nm)} nm · ${data.alt > 0 ? data.alt.toLocaleString() + ' ft' : 'gnd'}`;
+  const subtitle = `${Math.round(data._dist_km / 1.852)} nm · ${data.alt > 0 ? data.alt.toLocaleString() + ' ft' : 'gnd'}`;
   ctx.font = '20px ui-sans-serif, system-ui, sans-serif';
   ctx.fillStyle = '#9aa4b2';
   ctx.fillText(subtitle, canvas.width / 2, 56);
