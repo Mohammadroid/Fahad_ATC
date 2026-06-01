@@ -25,11 +25,21 @@ const OKBK_LAT = 29.2266;
 const OKBK_LON = 47.9689;
 const COS_LAT = Math.cos(OKBK_LAT * Math.PI / 180);
 
-// OKBK runway thresholds (from OSM)
-const RWY_33L_THR = { lat: 29.2127, lon: 47.9763 }; // RWY 15R/33L, 33 end
-const RWY_33R_THR = { lat: 29.2126, lon: 47.9986 }; // RWY 15L/33R, 33 end
-const RWY_15L_THR = { lat: 29.2412, lon: 47.9834 }; // RWY 15L/33R, 15 end
-const RWY_15R_THR = { lat: 29.2405, lon: 47.9615 }; // RWY 15R/33L, 15 end
+// OKBK runways — coordinates from OSM aeroway data, headings from the AIP
+// chart. Three physical runways:
+//   • 15L / 33R — east civilian runway (asphalt, 3500 m)
+//   • 15R / 33L — middle civilian runway (concrete, 3400 m)
+//   •  16 / 34  — west military runway (parallel pair to the east)
+// Each entry: { thr: lat/lon of the threshold, hdg: degrees true the aircraft
+// is pointing when landing on this end }.
+const RUNWAYS = {
+  '33R': { thr: { lat: 29.2126, lon: 47.9986 }, hdg: 335 },  // east, south thr
+  '33L': { thr: { lat: 29.2127, lon: 47.9763 }, hdg: 335 },  // middle, south thr
+  '15L': { thr: { lat: 29.2412, lon: 47.9834 }, hdg: 155 },  // east, north thr
+  '15R': { thr: { lat: 29.2405, lon: 47.9615 }, hdg: 155 },  // middle, north thr
+  '34':  { thr: { lat: 29.1899, lon: 47.9623 }, hdg: 343 },  // west military, south thr
+  '16':  { thr: { lat: 29.2293, lon: 47.9414 }, hdg: 163 },  // west military, north thr
+};
 
 const STATE_COLORS = {
   AIRBORNE_IN:  0x4499ff,
@@ -130,9 +140,10 @@ function buildPastPoints(pos, acAltFt, data) {
   }
 
   if (data.state === 'AIRBORNE_OUT') {
-    // Climbing out from runway; past altitude lower (or ground at the start)
-    const startThr = pickDepartureThreshold(data.hdg);
-    const startXZ = latLonToLocalXZ(startThr.lat, startThr.lon);
+    // Climbing out from runway: pick the heading-matching departure runway
+    // and start the past trail at its threshold.
+    const rw = pickDepartureRunway(data.hdg);
+    const startXZ = latLonToLocalXZ(rw.thr.lat, rw.thr.lon);
     const start = new THREE.Vector3(startXZ.x, altYFromFt(0), startXZ.z);
     const distToStart = pos.clone().setY(0).distanceTo(start.clone().setY(0));
     const sideSign = destSideSign(pos, fwd, data);
@@ -164,21 +175,29 @@ function buildFuturePoints(pos, acAltFt, data) {
   const acY = pos.y;
 
   if (data.state === 'AIRBORNE_IN') {
-    // Descending onto runway threshold
-    const thrXZ2 = pickArrivalThreshold(data.hdg, pos);
+    // Pick the runway whose heading best matches the aircraft's heading +
+    // whose threshold is nearest. Use the runway's actual heading (335° for 33L,
+    // 343° for 34, etc.) — not the aircraft's heading — to align the final
+    // approach corridor onto the real centerline.
+    const rw = pickArrivalRunway(data.hdg, pos);
     const thrY = altYFromFt(0);
-    const threshold = new THREE.Vector3(thrXZ2.x, thrY, thrXZ2.z);
+    const thrXZ = latLonToLocalXZ(rw.thr.lat, rw.thr.lon);
+    const threshold = new THREE.Vector3(thrXZ.x, thrY, thrXZ.z);
 
     const toThrFlat = new THREE.Vector3(threshold.x - pos.x, 0, threshold.z - pos.z);
     const distToThr = toThrFlat.length();
 
-    // Intercept the final-approach centerline — last segment is straight in
-    // along reverse runway heading.
-    const finalDir = fwd.clone();
+    // Runway forward direction (aircraft is flying along this when landing).
+    const rwyHdgRad = THREE.MathUtils.degToRad(rw.hdg);
+    const rwyFwd = new THREE.Vector3(Math.sin(rwyHdgRad), 0, -Math.cos(rwyHdgRad));
+
+    // Intercept point ON the extended centerline behind the threshold.
     const interceptDist = Math.min(distToThr * 0.55, range * 0.4);
-    const finalIntercept = threshold.clone().sub(finalDir.clone().multiplyScalar(interceptDist));
+    const finalIntercept = threshold.clone().sub(rwyFwd.clone().multiplyScalar(interceptDist));
     finalIntercept.y = lerp(acY, thrY, 0.70);
 
+    // Mid point in front of the aircraft, dropping altitude — Catmull-Rom
+    // smooths the bend onto the runway centerline.
     const mid = pos.clone().add(fwd.clone().multiplyScalar(distToThr * 0.30));
     mid.y = lerp(acY, thrY, 0.30);
 
@@ -224,21 +243,40 @@ function mkPt(pos, fwd, right, fwdDist, rightDist, y) {
 
 function lerp(a, b, t) { return a + (b - a) * t; }
 
-function pickArrivalThreshold(hdgDeg, pos) {
-  if (hdgDeg == null) return latLonToLocalXZ(RWY_33L_THR.lat, RWY_33L_THR.lon);
-  const useThirty3 = hdgDeg >= 270 || hdgDeg < 90;
-  const candidates = useThirty3 ? [RWY_33L_THR, RWY_33R_THR] : [RWY_15L_THR, RWY_15R_THR];
-  const a = latLonToLocalXZ(candidates[0].lat, candidates[0].lon);
-  const b = latLonToLocalXZ(candidates[1].lat, candidates[1].lon);
-  const dA = (a.x - pos.x) ** 2 + (a.z - pos.z) ** 2;
-  const dB = (b.x - pos.x) ** 2 + (b.z - pos.z) ** 2;
-  return dA < dB ? a : b;
+// Smallest signed angular difference between two compass headings (degrees).
+function headingDiff(a, b) {
+  let d = ((a - b) % 360 + 540) % 360 - 180;
+  return Math.abs(d);
 }
 
-function pickDepartureThreshold(hdgDeg) {
-  if (hdgDeg == null) return RWY_33L_THR;
-  const useThirty3 = hdgDeg >= 270 || hdgDeg < 90;
-  return useThirty3 ? RWY_33L_THR : RWY_15L_THR;
+// Build candidate list for the heading, sorted by how close their landing
+// heading is to the aircraft's actual heading.
+function candidatesForHeading(hdgDeg) {
+  const codes = Object.keys(RUNWAYS);
+  return codes
+    .map((code) => ({ code, ...RUNWAYS[code], diff: headingDiff(RUNWAYS[code].hdg, hdgDeg) }))
+    .filter((r) => r.diff < 30)         // within 30° of aircraft heading
+    .sort((a, b) => a.diff - b.diff);
+}
+
+function pickArrivalRunway(hdgDeg, pos) {
+  if (hdgDeg == null) return RUNWAYS['33L'];
+  const cands = candidatesForHeading(hdgDeg);
+  if (!cands.length) return RUNWAYS['33L'];
+  // Among heading-compatible runways pick the closest threshold to the aircraft.
+  let best = cands[0], bestDist = Infinity;
+  for (const r of cands) {
+    const xz = latLonToLocalXZ(r.thr.lat, r.thr.lon);
+    const d = (xz.x - pos.x) ** 2 + (xz.z - pos.z) ** 2;
+    if (d < bestDist) { best = r; bestDist = d; }
+  }
+  return best;
+}
+
+function pickDepartureRunway(hdgDeg) {
+  if (hdgDeg == null) return RUNWAYS['33L'];
+  const cands = candidatesForHeading(hdgDeg);
+  return cands[0] || RUNWAYS['33L'];
 }
 
 function originSideSign(pos, fwd, data) {
