@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview --host",
     "fetch:snapshot": "node scripts/fetch-snapshot.mjs",
-    "deploy": "vite build && gh-pages -d dist"
+    "deploy": "node scripts/sync-live.mjs && vite build && gh-pages -d dist"
   },
   "dependencies": {
     "3d-tiles-renderer": "^0.4.24",

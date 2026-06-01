@@ -30,8 +30,8 @@ const COS_LAT = Math.cos(OKBK_LAT * Math.PI / 180);
 //     100 → ~0.597
 //     200 → 0.75   (table edge)
 //
-const NEAR_RADIUS_KM = 200;       // ≤ this = full aircraft (compressed)
-const FAR_RADIUS_KM  = 750;       // ≤ this = edge chevron
+const NEAR_RADIUS_KM = 500;       // ≤ this = full aircraft (compressed)
+const FAR_RADIUS_KM  = 1500;      // ≤ this = edge chevron
 const MAX_DISTANT_INDICATORS = 18;
 const EDGE_RADIUS_W  = 0.86;      // chevron ring, just outside the display area
 const PIVOT_KM       = 1.75;      // boundary where linear → log
