@@ -230,8 +230,10 @@ function roundRect(ctx, x, y, w, h, r) {
 // ---------------------------------------------------------------------------
 // Combined panel: clock on top + inbound (left) + outbound (right)
 
+// Returns the canvas-pixel region for the gear icon so the caller can map a
+// raycast UV to it for click handling.
 export function drawCombinedPanel(ctx, w, h, opts) {
-  const { inbounds, outbounds } = opts;
+  const { inbounds, outbounds, gearActive } = opts;
 
   ctx.clearRect(0, 0, w, h);
   ctx.fillStyle = 'rgba(8, 12, 20, 0.95)';
@@ -244,6 +246,17 @@ export function drawCombinedPanel(ctx, w, h, opts) {
   // Top accent stripe
   ctx.fillStyle = '#4499ff';
   ctx.fillRect(0, 0, w, 8);
+
+  // ---- gear icon (top-right) ----
+  const gearSize = 56;
+  const gearPad = 18;
+  const gearRegion = {
+    x: w - gearSize - gearPad,
+    y: gearPad,
+    w: gearSize,
+    h: gearSize,
+  };
+  drawGear(ctx, gearRegion.x + gearSize / 2, gearRegion.y + gearSize / 2, gearSize * 0.42, gearActive);
 
   // ---- clock section (top 28%) ----
   const clockH = Math.round(h * 0.28);
@@ -281,6 +294,36 @@ export function drawCombinedPanel(ctx, w, h, opts) {
     routeKey: 'destination',
     extraKey: 'hdg',
   });
+
+  return { gearRegion };
+}
+
+function drawGear(ctx, cx, cy, radius, active = false) {
+  const teeth = 8;
+  ctx.save();
+  ctx.strokeStyle = active ? '#7dd3ff' : '#58a6ff';
+  ctx.lineWidth = 4;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (let i = 0; i < teeth; i++) {
+    const a0 = (i / teeth) * Math.PI * 2;
+    const a1 = ((i + 0.4) / teeth) * Math.PI * 2;
+    const a2 = ((i + 0.6) / teeth) * Math.PI * 2;
+    const a3 = ((i + 1) / teeth) * Math.PI * 2;
+    const r1 = radius, r2 = radius * 0.72;
+    const p = (a, r) => [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
+    if (i === 0) ctx.moveTo(...p(a0, r1));
+    ctx.lineTo(...p(a0, r1));
+    ctx.lineTo(...p(a1, r1));
+    ctx.lineTo(...p(a2, r2));
+    ctx.lineTo(...p(a3, r2));
+  }
+  ctx.closePath();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius * 0.4, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawClockSection(ctx, x, y, w, h) {

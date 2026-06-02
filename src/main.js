@@ -197,37 +197,33 @@ const interaction = setupInteraction({
 // also clickable via userData.onPinchClick (interaction.js reads UV from
 // the raycast hit).
 
+// Combined panel — relative to tabletop (offset = above + slightly back). User
+// can pinch + drag to override the offset; release re-syncs the offset.
 const combinedPanel = new SpatialPanel({
   name: 'combined',
-  width: 0.85, height: 0.60, canvasW: 1200, canvasH: 850,
+  width: 0.80, height: 0.56, canvasW: 1000, canvasH: 720,
   anchor: new THREE.Vector3(0, 1.45, -1.0),
   faceTarget: new THREE.Vector3(0, 1.4, 0),
 });
 scene.add(combinedPanel.group);
+let combinedGrabbed = false;
+const combinedOffset = new THREE.Vector3(0, 0.85, -0.30); // above tabletop + back
 interaction.registerGrabbable(combinedPanel.group, {
-  surfaces: [combinedPanel.mesh], kind: 'panel', minScale: 0.4, maxScale: 3.0,
+  surfaces: [combinedPanel.mesh],
+  kind: 'panel', minScale: 0.4, maxScale: 3.0,
+  onGrabStart: () => { combinedGrabbed = true; },
+  onGrabEnd: () => {
+    combinedGrabbed = false;
+    combinedOffset.copy(combinedPanel.group.position).sub(tabletop.position);
+  },
 });
 
-const settingsIcon = new SpatialPanel({
-  name: 'settings-icon',
-  width: 0.09, height: 0.09, canvasW: 200, canvasH: 200,
-  anchor: new THREE.Vector3(0.50, 1.78, -1.0),
-  faceTarget: new THREE.Vector3(0, 1.4, 0),
-});
-scene.add(settingsIcon.group);
-interaction.registerGrabbable(settingsIcon.group, {
-  surfaces: [settingsIcon.mesh], kind: 'panel', minScale: 0.5, maxScale: 2.0,
-});
-settingsIcon.redraw((ctx, w, h) => drawSettingsIcon(ctx, w, h));
-settingsIcon.group.userData.onPinchClick = () => {
-  settingsMenu.group.visible = !settingsMenu.group.visible;
-  return true;
-};
-
+// Settings menu (still a separate panel, but only created once and hidden
+// until the gear region in the combined panel is pinched).
 const settingsMenu = new SpatialPanel({
   name: 'settings-menu',
-  width: 0.48, height: 0.55, canvasW: 640, canvasH: 740,
-  anchor: new THREE.Vector3(0.75, 1.45, -0.7),
+  width: 0.44, height: 0.50, canvasW: 560, canvasH: 640,
+  anchor: new THREE.Vector3(0.70, 1.45, -0.7),
   faceTarget: new THREE.Vector3(0, 1.4, 0),
 });
 scene.add(settingsMenu.group);
@@ -294,11 +290,10 @@ function handleSettingsClick(id) {
   }
 }
 
+let combinedGearRegion = null;
 function refreshPanels() {
   const now = performance.now();
 
-  // Combined panel — re-render every 500 ms (smooth seconds counter) using
-  // the latest aircraft state + clock.
   if (combinedPanel.shouldRedraw(now, 500)) {
     const acs = traffic.aircraft.map((g) => g.userData).filter(Boolean);
     const inbounds = acs.filter((d) => d.state === 'AIRBORNE_IN')
@@ -306,13 +301,30 @@ function refreshPanels() {
     const outbounds = acs.filter((d) =>
       d.state === 'AIRBORNE_OUT' || d.state === 'CLEARED' || d.state === 'QUEUED'
     );
-    combinedPanel.redraw((ctx, w, h) =>
-      drawCombinedPanel(ctx, w, h, { inbounds, outbounds })
-    );
+    combinedPanel.redraw((ctx, w, h) => {
+      const r = drawCombinedPanel(ctx, w, h, {
+        inbounds, outbounds,
+        gearActive: settingsMenu.group.visible,
+      });
+      combinedGearRegion = r?.gearRegion || null;
+    });
   }
 }
-// Prime once
 refreshPanels();
+
+// Gear click handler — sits on the combined panel so the icon is "part of
+// the big screen" rather than a floating sibling.
+combinedPanel.group.userData.onPinchClick = (uv) => {
+  if (!uv || !combinedGearRegion) return false;
+  const px = uv.x * combinedPanel.canvas.width;
+  const py = (1 - uv.y) * combinedPanel.canvas.height;
+  const r = combinedGearRegion;
+  if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) {
+    settingsMenu.group.visible = !settingsMenu.group.visible;
+    return true;
+  }
+  return false;
+};
 
 // Desktop preview controls (only used outside XR)
 const orbit = new OrbitControls(camera, renderer.domElement);
@@ -338,6 +350,14 @@ renderer.setAnimationLoop((time, frame) => {
   traffic.update(dt);
   if (tilesAirport) tilesAirport.update();
   if (cyberpunkAirport?.userData?.update) cyberpunkAirport.userData.update(dt);
+
+  // Combined panel follows the tabletop unless the user is actively grabbing
+  // it. Position only — keep the panel facing forward; tabletop yaw doesn't
+  // rotate the panel so the info stays readable.
+  if (!combinedGrabbed) {
+    combinedPanel.group.position.copy(tabletop.position).add(combinedOffset);
+  }
+
   refreshPanels();
   renderer.render(scene, camera);
 });
