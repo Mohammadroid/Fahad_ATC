@@ -27,7 +27,7 @@
         font-weight: 600 !important; letter-spacing: 0.5px !important;
       }
     </style>
-    <script type="module" crossorigin src="/Fahad_ATC/assets/index-Belo7eES.js"></script>
+    <script type="module" crossorigin src="/Fahad_ATC/assets/index-mzVbXS3j.js"></script>
   </head>
   <body>
     <div id="info">
@@ -35,7 +35,7 @@
       <p>Open this page in the <strong>Meta Quest 3 browser</strong>, then tap <code>START AR</code>.</p>
       <p><strong>In AR:</strong> point at your real table — a blue reticle locks on. <strong>Pinch</strong> to drop the airport onto that surface. After placement, pinch an aircraft to read its flight strip (pinch again to dismiss); pinch the table to drag it; two-handed pinch to scale + rotate. On desktop, drag to orbit.</p>
       <p>Default mode = <strong>real-time FR24 data</strong>, refreshed every 15 min by the GitHub Actions cron; the page polls the JSON every 30 s. Curated scenarios: <a href="?snapshot=okbk_today.json"><code>?snapshot=okbk_today.json</code></a> · <a href="?snapshot=example.json"><code>?snapshot=example.json</code></a> · Animated mock: <a href="?mode=sim"><code>?mode=sim</code></a>.</p>
-      <p><strong>Photoreal mode:</strong> add <code>?airport=tiles&gkey=YOUR_GOOGLE_KEY</code> once and it's saved to localStorage. Setup: <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> → enable <em>Map Tiles API</em> → create key → restrict by referrer to <code>https://mohammadroid.github.io/*</code>.</p>
+      <p><strong>Airport modes:</strong> <a href="?"><code>default</code></a> = satellite + OSM (backup) · <a href="?airport=cyber"><code>?airport=cyber</code></a> = holographic wireframe · <a href="?airport=tiles"><code>?airport=tiles</code></a> = Google Photoreal 3D Tiles (needs <code>&gkey=YOUR_KEY</code>).</p>
       <p id="status-badge"></p>
     </div>
     <div id="google-credit" style="display:none;position:fixed;bottom:8px;left:8px;background:rgba(0,0,0,0.5);color:#fff;padding:4px 10px;border-radius:6px;font-size:11px;font-family:sans-serif;backdrop-filter:blur(4px)">Imagery © Google · Map Tiles API</div>
