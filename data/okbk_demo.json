@@ -1,0 +1,7 @@
+{
+  "source": "demo-scripted",
+  "cycle_seconds": 300,
+  "note": "5-minute choreographed demo with 6 aircraft on staggered schedules. Actual scripts are generated in src/feeds/demo_script.js — this file just signals demo mode to SnapshotPlayer.",
+  "okbk": { "lat": 29.2266, "lon": 47.9689 },
+  "aircraft": []
+}
