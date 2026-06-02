@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { SCALE } from '../airport.js';
 import { buildAircraftGroup, getAirlineAccent, getAirlineName, STATES } from '../aircraft.js';
+import { buildDemoAircraft, DEMO_CYCLE_SECONDS } from './demo_script.js';
 
 // Loads a moment-in-time snapshot JSON (produced by scripts/fetch-snapshot.mjs,
 // scripts/fetch-live.mjs, or hand-authored) and places aircraft on the tabletop.
@@ -51,7 +52,42 @@ export class SnapshotPlayer {
     this.parent = parent;
     this.url = url;
     this.aircraft = [];
-    this._spawnAll(snapshot);
+
+    if (snapshot.source === 'demo-scripted') {
+      this.isDemo = true;
+      this.demoTime = 0;
+      this.cycleSec = snapshot.cycle_seconds || DEMO_CYCLE_SECONDS;
+      this._spawnDemo();
+    } else {
+      this._spawnAll(snapshot);
+    }
+  }
+
+  _spawnDemo() {
+    const defs = buildDemoAircraft();
+    for (const def of defs) {
+      const wp0 = def.script[0];
+      const data = {
+        callsign: def.callsign,
+        type: def.type,
+        origin: def.origin,
+        destination: def.destination,
+        state: wp0.state,
+        lat: wp0.lat, lon: wp0.lon, alt: wp0.alt, hdg: wp0.hdg,
+        speed_kt: wp0.speed_kt,
+        on_ground: wp0.alt < 100,
+        dist_nm: 0,
+      };
+      const group = buildAircraftGroup(data);
+      const { x, z } = compressedTabletopPos(data.lat, data.lon);
+      const altLift = data.alt > 0 ? 0.04 + Math.min(data.alt / 12000, 1.5) * 0.10 : 0.005;
+      group.position.set(x, altLift, z);
+      group.userData._demoDef = def;
+      group.visible = false; // hidden until birth time
+      this.parent.add(group);
+      this.aircraft.push(group);
+    }
+    console.log(`[demo] choreographed scene with ${this.aircraft.length} aircraft, ${this.cycleSec}s cycle`);
   }
 
   _spawnAll(snapshot) {
@@ -161,132 +197,62 @@ export class SnapshotPlayer {
     return group;
   }
 
-  // Animate curated demo data so it shows aircraft landing / taxiing / taking
-  // off / leaving the map / respawning. Live snapshots don't animate — they
-  // get refreshed in place by the cron-polled JSON.
+  // Scripted demo animation: interpolate each aircraft's position/state from
+  // pre-computed waypoints. Static snapshots (live, curated) don't animate.
   update(dt) {
-    if (this.snapshot.source !== 'curated') return;
-    if (dt > 0.1) dt = 0.1; // clamp big steps so a paused tab doesn't teleport
-    const DEMO_SPEED = 6;   // global time multiplier — visible motion on table
+    if (!this.isDemo) return;
+    if (dt > 0.1) dt = 0.1;
+    this.demoTime += dt;
+    if (this.demoTime >= this.cycleSec) this.demoTime -= this.cycleSec;
+
+    const t = this.demoTime;
 
     for (const ac of this.aircraft) {
-      if (!ac.userData) continue;
-      tickAircraftDemo(ac, dt * DEMO_SPEED);
-      // Reposition + reorient on the table from the (mutated) lat/lon/hdg/alt
+      const def = ac.userData?._demoDef;
+      if (!def) continue;
+      const visible = t >= def.birth && t <= def.death;
+      ac.visible = visible;
+      if (!visible) continue;
+
+      // Locate the current segment of the script.
+      const wps = def.script;
+      let i = 0;
+      while (i < wps.length - 1 && wps[i + 1].t <= t) i++;
+      const a = wps[i];
+      const b = wps[Math.min(i + 1, wps.length - 1)];
+      const dur = Math.max(b.t - a.t, 0.0001);
+      const k = Math.max(0, Math.min(1, (t - a.t) / dur));
+
+      ac.userData.lat       = lerp(a.lat, b.lat, k);
+      ac.userData.lon       = lerp(a.lon, b.lon, k);
+      ac.userData.alt       = lerp(a.alt, b.alt, k);
+      ac.userData.hdg       = lerpAngle(a.hdg, b.hdg, k);
+      ac.userData.speed_kt  = Math.round(lerp(a.speed_kt, b.speed_kt, k));
+      ac.userData.state     = a.state; // current segment owns state until next waypoint
+      ac.userData.on_ground = ac.userData.alt < 100;
+
+      // dist for the inbound/outbound panel filter
+      const dxKm = (ac.userData.lon - 47.9689) * 111.32 * COS_LAT;
+      const dyKm = (ac.userData.lat - 29.2266) * 111.32;
+      const distKm = Math.hypot(dxKm, dyKm);
+      ac.userData.dist_nm = Math.round(distKm / 1.852);
+
       const { x, z } = compressedTabletopPos(ac.userData.lat, ac.userData.lon);
       const altLift = ac.userData.alt > 0
         ? 0.04 + Math.min(ac.userData.alt / 12000, 1.5) * 0.10
         : 0.005;
       ac.position.set(x, altLift, z);
       ac.rotation.y = THREE.MathUtils.degToRad(-(ac.userData.hdg || 0));
-      // Pulse the state ring for aircraft currently landing / taking off
+
       pulseIfActive(ac, dt);
     }
   }
 }
 
-// Demo state machine for a single aircraft.
-function tickAircraftDemo(ac, dt) {
-  const d = ac.userData;
-  d._timer = (d._timer || 0) + dt;
-
-  // Compute live distance to OKBK
-  const dxKm = (d.lon - 47.9689) * 111.32 * COS_LAT;
-  const dyKm = (d.lat - 29.2266) * 111.32;
-  const distKm = Math.hypot(dxKm, dyKm);
-  d.dist_nm = Math.round(distKm / 1.852);
-
-  switch (d.state) {
-    case 'AIRBORNE_IN': {
-      // Fly toward OKBK along current heading + descend
-      const speedKmS = (d.speed_kt || 250) * 1.852 / 3600;
-      moveAlongHeading(d, speedKmS * dt);
-      d.alt = Math.max(0, (d.alt || 0) - 220 * dt); // ~220 ft/s descent in demo time
-      if (distKm < 1.5) {
-        // Reached runway: become a CLEARED rollout
-        d.state = 'CLEARED';
-        d.alt = 0;
-        d.on_ground = true;
-        d.speed_kt = 90;
-        d._timer = 0;
-      }
-      break;
-    }
-    case 'CLEARED': {
-      // After landing: rollout slowing → TAXI. After parked: takeoff roll.
-      if (d.on_ground && (d.speed_kt || 0) > 20) {
-        // landing rollout
-        const speedKmS = (d.speed_kt || 90) * 1.852 / 3600;
-        moveAlongHeading(d, speedKmS * dt);
-        d.speed_kt = Math.max(15, (d.speed_kt || 90) - 35 * dt);
-        if (d.speed_kt <= 20) { d.state = 'TAXI'; d._timer = 0; }
-      } else {
-        // takeoff roll
-        const speedKmS = (d.speed_kt || 30) * 1.852 / 3600;
-        moveAlongHeading(d, speedKmS * dt);
-        d.speed_kt = Math.min(180, (d.speed_kt || 30) + 25 * dt);
-        if (d.speed_kt >= 150) {
-          d.state = 'AIRBORNE_OUT';
-          d.on_ground = false;
-          d.alt = 100;
-        }
-      }
-      break;
-    }
-    case 'TAXI': {
-      const speedKmS = 18 * 1.852 / 3600;
-      moveAlongHeading(d, speedKmS * dt);
-      if (d._timer > 6) { d.state = 'PARKED'; d._timer = 0; d.speed_kt = 0; }
-      break;
-    }
-    case 'PARKED': {
-      if (d._timer > 4) {
-        // Begin take-off as outbound on the same runway direction
-        const headingMatters = d.destination || 'KWI';
-        d.state = 'CLEARED';
-        d.on_ground = true;
-        d.speed_kt = 30;
-        d.alt = 0;
-        d._timer = 0;
-        // Pick a departure heading from the closest 33/15 alignment
-        d.hdg = Math.random() < 0.5 ? 335 : 155;
-      }
-      break;
-    }
-    case 'QUEUED': {
-      if (d._timer > 2) { d.state = 'CLEARED'; d.on_ground = true; d.speed_kt = 30; d._timer = 0; }
-      break;
-    }
-    case 'AIRBORNE_OUT': {
-      const speedKmS = (d.speed_kt || 240) * 1.852 / 3600;
-      moveAlongHeading(d, speedKmS * dt);
-      d.alt = Math.min(40000, (d.alt || 100) + 280 * dt);
-      if (distKm > 90) {
-        // Respawn far away as an INBOUND from a fresh bearing
-        const ang = Math.random() * Math.PI * 2;
-        const farKm = 70 + Math.random() * 20;
-        const okLat = 29.2266, okLon = 47.9689;
-        d.lat = okLat + (farKm / 111.32) * Math.cos(ang);
-        d.lon = okLon + (farKm / (111.32 * COS_LAT)) * Math.sin(ang);
-        // Heading TOWARD OKBK
-        const dE = okLon - d.lon, dN = okLat - d.lat;
-        d.hdg = Math.round(((Math.atan2(dE, dN) * 180 / Math.PI) + 360) % 360);
-        d.state = 'AIRBORNE_IN';
-        d.alt = 8000 + Math.random() * 6000;
-        d.speed_kt = 240;
-        d._timer = 0;
-      }
-      break;
-    }
-  }
-}
-
-function moveAlongHeading(d, distKm) {
-  const hdgRad = (d.hdg || 0) * Math.PI / 180;
-  const deltaN = distKm * Math.cos(hdgRad);
-  const deltaE = distKm * Math.sin(hdgRad);
-  d.lat += deltaN / 111.32;
-  d.lon += deltaE / (111.32 * Math.cos(d.lat * Math.PI / 180));
+function lerp(a, b, k) { return a + (b - a) * k; }
+function lerpAngle(a, b, k) {
+  const diff = ((b - a + 540) % 360) - 180; // shortest signed delta
+  return (a + diff * k + 360) % 360;
 }
 
 function pulseIfActive(ac, dt) {

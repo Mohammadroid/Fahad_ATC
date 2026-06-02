@@ -235,7 +235,7 @@ interaction.registerGrabbable(settingsMenu.group, {
 // Current settings state (read from URL + localStorage)
 const settingsState = {
   map: airportMode === 'cyber' ? 'cyber' : airportMode === 'tiles' ? 'tiles' : 'osm',
-  data: snapshotName && snapshotName !== 'okbk_live.json' ? 'demo' : 'live',
+  data: snapshotName === 'okbk_demo.json' || snapshotName === 'okbk_today.json' ? 'demo' : 'live',
   theme: currentTheme,
 };
 
@@ -284,7 +284,7 @@ function handleSettingsClick(id) {
   if (cat === 'data') {
     const url = new URL(location);
     if (val === 'live') url.searchParams.delete('snapshot');
-    else url.searchParams.set('snapshot', 'okbk_today.json');
+    else url.searchParams.set('snapshot', 'okbk_demo.json');
     location.href = url.toString();
     return;
   }
