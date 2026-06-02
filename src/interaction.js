@@ -176,7 +176,7 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
       const hits = raycaster.intersectObjects(allSurfaces, false);
       if (hits.length > 0) {
         const group = findGrabbableAncestor(hits[0].object);
-        if (group) return { type: 'grabbable', target: group, point: hits[0].point };
+        if (group) return { type: 'grabbable', target: group, point: hits[0].point, uv: hits[0].uv };
       }
     }
     return null;
@@ -217,7 +217,13 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
       if (nearest) { toggleSelect(nearest); return; }
     }
 
-    // 3. Grabbable via laser
+    // 3. Click on a panel button (consume before grabbing)
+    if (hit?.type === 'grabbable' && hit.target?.userData?.onPinchClick) {
+      const consumed = hit.target.userData.onPinchClick(hit.uv, hit.point);
+      if (consumed) return;
+    }
+
+    // 4. Grabbable via laser
     if (hit?.type === 'grabbable' && hit.target) {
       startGrab(hit.target, hand);
       return;

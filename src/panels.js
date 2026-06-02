@@ -226,3 +226,309 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x,     y,     x + w, y,     r);
   ctx.closePath();
 }
+
+// ---------------------------------------------------------------------------
+// Combined panel: clock on top + inbound (left) + outbound (right)
+
+export function drawCombinedPanel(ctx, w, h, opts) {
+  const { inbounds, outbounds } = opts;
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(8, 12, 20, 0.95)';
+  roundRect(ctx, 0, 0, w, h, 22);
+  ctx.fill();
+  ctx.strokeStyle = '#4499ff';
+  ctx.lineWidth = 5;
+  ctx.stroke();
+
+  // Top accent stripe
+  ctx.fillStyle = '#4499ff';
+  ctx.fillRect(0, 0, w, 8);
+
+  // ---- clock section (top 28%) ----
+  const clockH = Math.round(h * 0.28);
+  drawClockSection(ctx, 0, 0, w, clockH);
+
+  // Horizontal divider
+  ctx.strokeStyle = 'rgba(120, 140, 170, 0.35)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(28, clockH);
+  ctx.lineTo(w - 28, clockH);
+  ctx.stroke();
+
+  // Vertical divider between the two lists
+  const midX = w / 2;
+  ctx.beginPath();
+  ctx.moveTo(midX, clockH + 20);
+  ctx.lineTo(midX, h - 20);
+  ctx.stroke();
+
+  // ---- inbound list (left column) ----
+  drawListColumn(ctx, 0, clockH, midX, h - clockH, {
+    title: 'INBOUND',
+    flights: inbounds,
+    accentHex: '#4499ff',
+    routeKey: 'origin',
+    extraKey: 'eta',
+  });
+
+  // ---- outbound list (right column) ----
+  drawListColumn(ctx, midX, clockH, w - midX, h - clockH, {
+    title: 'OUTBOUND',
+    flights: outbounds,
+    accentHex: '#ff8844',
+    routeKey: 'destination',
+    extraKey: 'hdg',
+  });
+}
+
+function drawClockSection(ctx, x, y, w, h) {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+
+  // Header label
+  ctx.fillStyle = '#7d8b9e';
+  ctx.font = 'bold 18px ui-sans-serif, system-ui, sans-serif';
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'center';
+  ctx.fillText('LOCAL TIME', x + w / 2, y + 22);
+
+  // Big HH:MM (white) with smaller :SS (cyan)
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 96px ui-monospace, "SF Mono", monospace';
+  const hmText = `${hh}:${mm}`;
+  const ssText = `:${ss}`;
+  ctx.font = 'bold 96px ui-monospace, "SF Mono", monospace';
+  const hmWidth = ctx.measureText(hmText).width;
+  ctx.font = 'bold 56px ui-monospace, "SF Mono", monospace';
+  const ssWidth = ctx.measureText(ssText).width;
+  const totalWidth = hmWidth + ssWidth;
+  const startX = x + (w - totalWidth) / 2;
+  ctx.font = 'bold 96px ui-monospace, "SF Mono", monospace';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(hmText, startX, y + h * 0.52);
+  ctx.font = 'bold 56px ui-monospace, "SF Mono", monospace';
+  ctx.fillStyle = '#58a6ff';
+  ctx.fillText(ssText, startX + hmWidth, y + h * 0.58);
+
+  // Date
+  ctx.textAlign = 'center';
+  ctx.font = '22px ui-sans-serif, system-ui, sans-serif';
+  ctx.fillStyle = '#a8c4ff';
+  const dateStr = now.toLocaleDateString('en-GB', {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+  });
+  ctx.fillText(dateStr, x + w / 2, y + h * 0.88);
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+}
+
+function drawListColumn(ctx, x, y, w, h, opts) {
+  const { title, flights, accentHex, routeKey, extraKey } = opts;
+  const pad = 24;
+
+  // Column title
+  ctx.fillStyle = accentHex;
+  ctx.font = 'bold 34px ui-sans-serif, system-ui, sans-serif';
+  ctx.textBaseline = 'top';
+  ctx.fillText(title, x + pad, y + 18);
+
+  // Count subtitle
+  ctx.font = '18px ui-sans-serif, system-ui, sans-serif';
+  ctx.fillStyle = '#9aa4b2';
+  ctx.fillText(`${flights.length} aircraft`, x + pad, y + 58);
+
+  // Column headers
+  const colY = y + 96;
+  ctx.font = 'bold 15px ui-sans-serif, system-ui, sans-serif';
+  ctx.fillStyle = '#7d8b9e';
+  ctx.fillText('FLT',  x + pad,        colY);
+  ctx.fillText('TYPE', x + pad + 100,  colY);
+  ctx.fillText(routeKey === 'origin' ? 'FROM' : 'TO', x + pad + 165, colY);
+  ctx.fillText('ALT',  x + pad + 240,  colY);
+  ctx.fillText(extraKey === 'eta' ? 'ETA' : 'HDG', x + pad + 305, colY);
+
+  // Header underline
+  ctx.strokeStyle = 'rgba(120,140,170,0.35)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + pad, colY + 22);
+  ctx.lineTo(x + w - pad, colY + 22);
+  ctx.stroke();
+
+  // Rows
+  if (!flights.length) {
+    ctx.fillStyle = '#7d8b9e';
+    ctx.font = 'italic 18px ui-sans-serif, system-ui, sans-serif';
+    ctx.fillText('No flights tracked.', x + pad, colY + 50);
+    return;
+  }
+
+  const rowH = 36;
+  const maxRows = Math.floor((h - 130) / rowH);
+  flights.slice(0, maxRows).forEach((data, i) => {
+    const ry = colY + 42 + i * rowH;
+
+    ctx.font = 'bold 18px ui-sans-serif, system-ui, sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText((data.callsign || '').slice(0, 8), x + pad, ry);
+
+    ctx.font = '16px ui-sans-serif, system-ui, sans-serif';
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillText((data.type || '-').slice(0, 5), x + pad + 100, ry);
+
+    const route = routeKey === 'origin' ? (data.origin || '-') : (data.destination || '-');
+    ctx.fillText(String(route).slice(0, 5), x + pad + 165, ry);
+
+    ctx.fillStyle = '#a8c4ff';
+    const altText = data.alt ? formatAlt(data.alt) : 'gnd';
+    ctx.fillText(altText, x + pad + 240, ry);
+
+    ctx.fillStyle = '#e6edf3';
+    const extra = extraKey === 'eta' ? computeEta(data) : `${data.hdg ?? '-'}°`;
+    ctx.fillText(extra, x + pad + 305, ry);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Settings icon (small gear)
+
+export function drawSettingsIcon(ctx, w, h) {
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(10, 14, 22, 0.92)';
+  roundRect(ctx, 4, 4, w - 8, h - 8, 16);
+  ctx.fill();
+  ctx.strokeStyle = '#58a6ff';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Gear glyph
+  const cx = w / 2, cy = h / 2;
+  const teeth = 8;
+  const inner = Math.min(w, h) * 0.22;
+  const outer = Math.min(w, h) * 0.36;
+
+  ctx.strokeStyle = '#58a6ff';
+  ctx.lineWidth = 6;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (let i = 0; i < teeth; i++) {
+    const a0 = (i / teeth) * Math.PI * 2;
+    const a1 = ((i + 0.4) / teeth) * Math.PI * 2;
+    const a2 = ((i + 0.6) / teeth) * Math.PI * 2;
+    const a3 = ((i + 1) / teeth) * Math.PI * 2;
+    const r1 = outer, r2 = inner * 1.4;
+    const p = (a, r) => [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
+    if (i === 0) ctx.moveTo(...p(a0, r1));
+    ctx.lineTo(...p(a0, r1));
+    ctx.lineTo(...p(a1, r1));
+    ctx.lineTo(...p(a2, r2));
+    ctx.lineTo(...p(a3, r2));
+  }
+  ctx.closePath();
+  ctx.stroke();
+
+  // Hub
+  ctx.beginPath();
+  ctx.arc(cx, cy, inner * 0.55, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+// ---------------------------------------------------------------------------
+// Settings menu — list of toggle buttons. Returns clickable regions in canvas
+// pixel coords so the interaction layer can map a raycast UV to a button.
+
+export function drawSettingsMenu(ctx, w, h, opts) {
+  const { currentMap, currentData, currentTheme } = opts;
+  const regions = [];
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(10, 14, 22, 0.97)';
+  roundRect(ctx, 0, 0, w, h, 18);
+  ctx.fill();
+  ctx.strokeStyle = '#7d8b9e';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  ctx.fillStyle = '#4499ff';
+  ctx.fillRect(0, 0, w, 8);
+
+  // Title
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 32px ui-sans-serif, system-ui, sans-serif';
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  ctx.fillText('SETTINGS', 28, 28);
+
+  let yCursor = 90;
+
+  yCursor = drawSection(ctx, 'MAP', 28, yCursor, w - 56, [
+    { id: 'map:osm',   label: 'Satellite', active: currentMap === 'osm' },
+    { id: 'map:cyber', label: 'Cyberpunk', active: currentMap === 'cyber' },
+    { id: 'map:tiles', label: 'Photoreal', active: currentMap === 'tiles' },
+  ], regions);
+
+  yCursor += 28;
+  yCursor = drawSection(ctx, 'DATA SOURCE', 28, yCursor, w - 56, [
+    { id: 'data:live', label: 'Live FR24',     active: currentData === 'live' },
+    { id: 'data:demo', label: 'Demo 14:00 LT', active: currentData === 'demo' },
+  ], regions);
+
+  yCursor += 28;
+  yCursor = drawSection(ctx, 'VIEW', 28, yCursor, w - 56, [
+    { id: 'theme:day',   label: '☀ Day',   active: currentTheme === 'day' },
+    { id: 'theme:night', label: '☾ Night', active: currentTheme === 'night' },
+  ], regions);
+
+  return regions;
+}
+
+function drawSection(ctx, label, x, y, w, items, regions) {
+  ctx.fillStyle = '#7d8b9e';
+  ctx.font = 'bold 16px ui-sans-serif, system-ui, sans-serif';
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  ctx.fillText(label, x, y);
+
+  const btnY = y + 28;
+  const btnH = 56;
+  const gap = 12;
+  const btnW = (w - gap * (items.length - 1)) / items.length;
+
+  items.forEach((it, i) => {
+    const bx = x + i * (btnW + gap);
+    const by = btnY;
+    regions.push({ id: it.id, x: bx, y: by, w: btnW, h: btnH });
+
+    if (it.active) {
+      ctx.fillStyle = 'rgba(68, 153, 255, 0.25)';
+      roundRect(ctx, bx, by, btnW, btnH, 10);
+      ctx.fill();
+      ctx.strokeStyle = '#4499ff';
+      ctx.lineWidth = 2.5;
+    } else {
+      ctx.fillStyle = 'rgba(30, 40, 55, 0.6)';
+      roundRect(ctx, bx, by, btnW, btnH, 10);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(120, 140, 170, 0.5)';
+      ctx.lineWidth = 1.5;
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = it.active ? '#ffffff' : '#a8c4ff';
+    ctx.font = `${it.active ? 'bold ' : ''}18px ui-sans-serif, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(it.label, bx + btnW / 2, by + btnH / 2);
+  });
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  return btnY + btnH;
+}

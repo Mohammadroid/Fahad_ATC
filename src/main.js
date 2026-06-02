@@ -8,7 +8,7 @@ import { buildAirportCyberpunk } from './airport_cyberpunk.js';
 import { TrafficSimulator } from './traffic.js';
 import { SnapshotPlayer } from './feeds/snapshot.js';
 import { setupInteraction } from './interaction.js';
-import { SpatialPanel, drawFlightList, drawClock } from './panels.js';
+import { SpatialPanel, drawCombinedPanel, drawSettingsIcon, drawSettingsMenu } from './panels.js';
 import { getAirlineAccent } from './aircraft.js';
 
 // URL params drive feed and airport-renderer selection.
@@ -30,10 +30,28 @@ renderer.xr.enabled = true;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 document.body.appendChild(renderer.domElement);
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x1a2030, 1.0));
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x1a2030, 1.0);
+scene.add(hemiLight);
 const sun = new THREE.DirectionalLight(0xffffff, 1.4);
 sun.position.set(5, 10, 5);
 scene.add(sun);
+
+// Day / night theme (persisted in localStorage)
+function applyTheme(theme) {
+  if (theme === 'night') {
+    hemiLight.intensity = 0.35;
+    sun.intensity = 0.45;
+    scene.background = new THREE.Color(0x050a14);
+  } else {
+    hemiLight.intensity = 1.0;
+    sun.intensity = 1.4;
+    scene.background = null; // transparent for passthrough
+  }
+  localStorage.setItem('fahad_atc_theme', theme);
+}
+const initialTheme = localStorage.getItem('fahad_atc_theme') || 'day';
+applyTheme(initialTheme);
+let currentTheme = initialTheme;
 
 // Tabletop root — low coffee-table height, 0.7 m forward. User can pinch
 // + drag to reposition, or two-handed pinch to scale + rotate (see interaction.js).
@@ -174,82 +192,126 @@ const interaction = setupInteraction({
 });
 
 // -----------------------------------------------------------------------
-// Floating panels (inbound list, outbound list, clock). Each is grabbable +
-// scalable via the same pinch gestures as the tabletop.
+// Combined flight panel (clock on top + inbound/outbound split) + settings
+// icon + settings menu. All grabbable + scalable; settings menu+icon are
+// also clickable via userData.onPinchClick (interaction.js reads UV from
+// the raycast hit).
 
-const ATC_BLUE   = '#4499ff';
-const ATC_ORANGE = '#ff8844';
-
-const inboundPanel = new SpatialPanel({
-  name: 'inbound',
-  width: 0.42, height: 0.62, canvasW: 560, canvasH: 820,
-  anchor: new THREE.Vector3(-0.95, 1.35, -0.9),
+const combinedPanel = new SpatialPanel({
+  name: 'combined',
+  width: 0.85, height: 0.60, canvasW: 1200, canvasH: 850,
+  anchor: new THREE.Vector3(0, 1.45, -1.0),
   faceTarget: new THREE.Vector3(0, 1.4, 0),
 });
-scene.add(inboundPanel.group);
-interaction.registerGrabbable(inboundPanel.group, {
-  surfaces: [inboundPanel.mesh], kind: 'panel', minScale: 0.4, maxScale: 3.0,
+scene.add(combinedPanel.group);
+interaction.registerGrabbable(combinedPanel.group, {
+  surfaces: [combinedPanel.mesh], kind: 'panel', minScale: 0.4, maxScale: 3.0,
 });
 
-const outboundPanel = new SpatialPanel({
-  name: 'outbound',
-  width: 0.42, height: 0.62, canvasW: 560, canvasH: 820,
-  anchor: new THREE.Vector3(0.95, 1.35, -0.9),
+const settingsIcon = new SpatialPanel({
+  name: 'settings-icon',
+  width: 0.09, height: 0.09, canvasW: 200, canvasH: 200,
+  anchor: new THREE.Vector3(0.50, 1.78, -1.0),
   faceTarget: new THREE.Vector3(0, 1.4, 0),
 });
-scene.add(outboundPanel.group);
-interaction.registerGrabbable(outboundPanel.group, {
-  surfaces: [outboundPanel.mesh], kind: 'panel', minScale: 0.4, maxScale: 3.0,
+scene.add(settingsIcon.group);
+interaction.registerGrabbable(settingsIcon.group, {
+  surfaces: [settingsIcon.mesh], kind: 'panel', minScale: 0.5, maxScale: 2.0,
+});
+settingsIcon.redraw((ctx, w, h) => drawSettingsIcon(ctx, w, h));
+settingsIcon.group.userData.onPinchClick = () => {
+  settingsMenu.group.visible = !settingsMenu.group.visible;
+  return true;
+};
+
+const settingsMenu = new SpatialPanel({
+  name: 'settings-menu',
+  width: 0.48, height: 0.55, canvasW: 640, canvasH: 740,
+  anchor: new THREE.Vector3(0.75, 1.45, -0.7),
+  faceTarget: new THREE.Vector3(0, 1.4, 0),
+});
+scene.add(settingsMenu.group);
+settingsMenu.group.visible = false;
+interaction.registerGrabbable(settingsMenu.group, {
+  surfaces: [settingsMenu.mesh], kind: 'panel', minScale: 0.5, maxScale: 2.0,
 });
 
-const clockPanel = new SpatialPanel({
-  name: 'clock',
-  width: 0.30, height: 0.20, canvasW: 600, canvasH: 400,
-  anchor: new THREE.Vector3(0, 1.95, -1.15),
-  faceTarget: new THREE.Vector3(0, 1.6, 0),
-});
-scene.add(clockPanel.group);
-interaction.registerGrabbable(clockPanel.group, {
-  surfaces: [clockPanel.mesh], kind: 'panel', minScale: 0.4, maxScale: 3.0,
-});
+// Current settings state (read from URL + localStorage)
+const settingsState = {
+  map: airportMode === 'cyber' ? 'cyber' : airportMode === 'tiles' ? 'tiles' : 'osm',
+  data: snapshotName && snapshotName !== 'okbk_live.json' ? 'demo' : 'live',
+  theme: currentTheme,
+};
+
+let settingsRegions = [];
+
+function redrawSettingsMenu() {
+  settingsMenu.redraw((ctx, w, h) => {
+    settingsRegions = drawSettingsMenu(ctx, w, h, {
+      currentMap: settingsState.map,
+      currentData: settingsState.data,
+      currentTheme: settingsState.theme,
+    });
+  });
+}
+redrawSettingsMenu();
+
+settingsMenu.group.userData.onPinchClick = (uv) => {
+  if (!uv) return false;
+  const px = uv.x * settingsMenu.canvas.width;
+  const py = (1 - uv.y) * settingsMenu.canvas.height;
+  for (const r of settingsRegions) {
+    if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) {
+      handleSettingsClick(r.id);
+      return true;
+    }
+  }
+  return false;
+};
+
+function handleSettingsClick(id) {
+  const [cat, val] = id.split(':');
+  if (cat === 'theme') {
+    settingsState.theme = val;
+    currentTheme = val;
+    applyTheme(val);
+    redrawSettingsMenu();
+    return;
+  }
+  if (cat === 'map') {
+    const url = new URL(location);
+    if (val === 'osm') url.searchParams.delete('airport');
+    else url.searchParams.set('airport', val);
+    location.href = url.toString();
+    return;
+  }
+  if (cat === 'data') {
+    const url = new URL(location);
+    if (val === 'live') url.searchParams.delete('snapshot');
+    else url.searchParams.set('snapshot', 'okbk_today.json');
+    location.href = url.toString();
+    return;
+  }
+}
 
 function refreshPanels() {
   const now = performance.now();
 
-  if (clockPanel.shouldRedraw(now, 250)) {
-    clockPanel.redraw((ctx, w, h) => drawClock(ctx, w, h));
-  }
-
-  if (inboundPanel.shouldRedraw(now, 2000)) {
-    const inbounds = traffic.aircraft
-      .map((g) => g.userData)
-      .filter((d) => d && d.state === 'AIRBORNE_IN')
+  // Combined panel — re-render every 500 ms (smooth seconds counter) using
+  // the latest aircraft state + clock.
+  if (combinedPanel.shouldRedraw(now, 500)) {
+    const acs = traffic.aircraft.map((g) => g.userData).filter(Boolean);
+    const inbounds = acs.filter((d) => d.state === 'AIRBORNE_IN')
       .sort((a, b) => (a.dist_nm ?? 9999) - (b.dist_nm ?? 9999));
-    inboundPanel.redraw((ctx, w, h) =>
-      drawFlightList(ctx, w, h, {
-        title: 'INBOUND',
-        flights: inbounds,
-        accentHex: ATC_BLUE,
-        headerSubtitle: `${inbounds.length} aircraft on approach`,
-      })
+    const outbounds = acs.filter((d) =>
+      d.state === 'AIRBORNE_OUT' || d.state === 'CLEARED' || d.state === 'QUEUED'
     );
-  }
-
-  if (outboundPanel.shouldRedraw(now, 2000)) {
-    const outbounds = traffic.aircraft
-      .map((g) => g.userData)
-      .filter((d) => d && (d.state === 'AIRBORNE_OUT' || d.state === 'CLEARED' || d.state === 'QUEUED'));
-    outboundPanel.redraw((ctx, w, h) =>
-      drawFlightList(ctx, w, h, {
-        title: 'OUTBOUND',
-        flights: outbounds,
-        accentHex: ATC_ORANGE,
-        headerSubtitle: `${outbounds.length} aircraft departing`,
-      })
+    combinedPanel.redraw((ctx, w, h) =>
+      drawCombinedPanel(ctx, w, h, { inbounds, outbounds })
     );
   }
 }
-// Prime the panels once so they aren't blank for the first 2 s.
+// Prime once
 refreshPanels();
 
 // Desktop preview controls (only used outside XR)
