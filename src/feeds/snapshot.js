@@ -115,6 +115,7 @@ export class SnapshotPlayer {
   // Returns true if a refresh happened (new timestamp), false otherwise.
   async refresh() {
     if (!this.url) return false;
+    if (this.isDemo) return false;   // demo is scripted; never replace its state
     let data;
     try {
       const res = await fetch(this.url, { cache: 'no-store' });
@@ -148,8 +149,11 @@ export class SnapshotPlayer {
   spawnNear(data) {
     const group = buildAircraftGroup(data);
     const { x, z } = compressedTabletopPos(data.lat, data.lon);
+    // Deterministic jitter (per-callsign) so aircraft at near-identical bearings
+    // don't visually stack on top of each other after the log compression.
+    const jit = jitterOffset(data);
     const altLift = data.alt > 0 ? 0.04 + Math.min(data.alt / 12000, 1.5) * 0.10 : 0.005;
-    group.position.set(x, altLift, z);
+    group.position.set(x + jit.dx, altLift, z + jit.dz);
     this.parent.add(group);
     return group;
   }
@@ -307,6 +311,17 @@ function distanceKm(lat, lon) {
   const dxKm = (lon - OKBK_LON) * 111.32 * COS_LAT;
   const dyKm = (lat - OKBK_LAT) * 111.32;
   return Math.hypot(dxKm, dyKm);
+}
+
+// Deterministic small offset per aircraft so visually-overlapping live entries
+// (similar bearing + similar compressed distance) get pushed apart.
+function jitterOffset(data) {
+  const seed = (data.callsign || data.icao24 || data.hex || 'x') + '';
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  const r1 = ((h        & 0x3ff) / 0x200) - 1; // -1 .. +1
+  const r2 = (((h >> 10) & 0x3ff) / 0x200) - 1;
+  return { dx: r1 * 0.035, dz: r2 * 0.035 }; // up to ~3.5 cm in any direction
 }
 
 function bearingFromOKBK(lat, lon) {
