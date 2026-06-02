@@ -4,6 +4,7 @@ import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildAirport, setOSMOverlaysVisible } from './airport.js';
 import { buildAirportTiles } from './airport_tiles.js';
+import { buildAirportCyberpunk } from './airport_cyberpunk.js';
 import { TrafficSimulator } from './traffic.js';
 import { SnapshotPlayer } from './feeds/snapshot.js';
 import { setupInteraction } from './interaction.js';
@@ -49,13 +50,30 @@ base.name = 'tabletop-base';
 base.position.y = -0.012;
 tabletop.add(base);
 
+// Airport renderer selection.
+// Default = OSM + satellite (the current "real" map). Opt into others via:
+//   ?airport=cyber  → cyberpunk wireframe (this file)
+//   ?airport=tiles  → Google Photorealistic 3D Tiles (needs ?gkey=...)
+const airportMode = params.get('airport') || 'osm';
+
 const airport = await buildAirport();
 tabletop.add(airport);
+
+let cyberpunkAirport = null;
+if (airportMode === 'cyber') {
+  cyberpunkAirport = await buildAirportCyberpunk();
+  tabletop.add(cyberpunkAirport);
+  // Hide the satellite + OSM buildings so the wireframe stands out.
+  setOSMOverlaysVisible(airport, false);
+  airport.traverse((o) => {
+    if (o.userData?.runway || o.userData?.terminal) o.visible = false;
+  });
+}
 
 // Photoreal Google 3D Tiles mode: `?airport=tiles` + a Google Maps API key
 // with the "Map Tiles API" enabled. Key persists to localStorage after first
 // visit via `?gkey=KEY`.
-const wantTiles = params.get('airport') === 'tiles' || params.has('gkey');
+const wantTiles = airportMode === 'tiles' || params.has('gkey');
 const urlKey = params.get('gkey');
 if (urlKey) localStorage.setItem('fahad_atc_gkey', urlKey);
 const apiKey = urlKey || localStorage.getItem('fahad_atc_gkey');
@@ -257,6 +275,7 @@ renderer.setAnimationLoop((time, frame) => {
   interaction.update(frame);
   traffic.update(dt);
   if (tilesAirport) tilesAirport.update();
+  if (cyberpunkAirport?.userData?.update) cyberpunkAirport.userData.update(dt);
   refreshPanels();
   renderer.render(scene, camera);
 });
