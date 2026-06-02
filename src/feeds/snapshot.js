@@ -61,6 +61,8 @@ export class SnapshotPlayer {
     } else {
       this._spawnAll(snapshot);
     }
+    // Expose for console-side debugging (`window._sp.isDemo`, `_sp.demoTime`, …)
+    if (typeof window !== 'undefined') window._sp = this;
   }
 
   _spawnDemo() {
@@ -208,6 +210,13 @@ export class SnapshotPlayer {
     if (dt > 0.1) dt = 0.1;
     this.demoTime += dt;
     if (this.demoTime >= this.cycleSec) this.demoTime -= this.cycleSec;
+
+    // One-shot diagnostic on first update so we can confirm the loop is firing.
+    if (!this._loggedFirst) {
+      this._loggedFirst = true;
+      console.log('[demo] first update — aircraft=', this.aircraft.length,
+                  'cycleSec=', this.cycleSec, 'dt=', dt);
+    }
 
     const t = this.demoTime;
 

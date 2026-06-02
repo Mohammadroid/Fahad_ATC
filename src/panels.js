@@ -262,6 +262,20 @@ export function drawCombinedPanel(ctx, w, h, opts) {
   const clockH = Math.round(h * 0.28);
   drawClockSection(ctx, 0, 0, w, clockH);
 
+  // Demo timer (only when in demo mode — caller passes opts.demoTime)
+  if (typeof opts.demoTime === 'number') {
+    const sec = Math.floor(opts.demoTime);
+    const mm = String(Math.floor(sec / 60)).padStart(1, '0');
+    const ss = String(sec % 60).padStart(2, '0');
+    ctx.fillStyle = '#ffd86b';
+    ctx.font = 'bold 22px ui-monospace, monospace';
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    ctx.fillText(`▶ DEMO ${mm}:${ss}`, 28, clockH - 36);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+  }
+
   // Horizontal divider
   ctx.strokeStyle = 'rgba(120, 140, 170, 0.35)';
   ctx.lineWidth = 2;

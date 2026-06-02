@@ -305,6 +305,7 @@ function refreshPanels() {
       const r = drawCombinedPanel(ctx, w, h, {
         inbounds, outbounds,
         gearActive: settingsMenu.group.visible,
+        demoTime: traffic?.isDemo ? traffic.demoTime : null,
       });
       combinedGearRegion = r?.gearRegion || null;
     });
