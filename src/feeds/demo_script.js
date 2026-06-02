@@ -90,19 +90,23 @@ function buildOutbound({
 }
 
 // Build an INBOUND aircraft script (far → final → touchdown → taxi → park).
+// All approach waypoints sit on the extended runway centerline so the aircraft
+// flies straight in. `entryBearing` is no longer used — it caused waypoints to
+// zig-zag across the runway and the aircraft visibly flew backwards.
 function buildInbound({
   callsign, type, origin, destination,
-  gate, runway, entryBearing,
+  gate, runway,
   entryT, finalT, touchdownT, parkT, deathT,
 }) {
   const g = GATES[gate];
   const rwy = RWY[runway];
   const reverseHdg = (rwy.hdg + 180) % 360;
 
-  // Aircraft is positioned along the entry bearing from OKBK, descending.
-  const farPoint   = offset(rwy.lat, rwy.lon, entryBearing,        85);
-  const midPoint   = offset(rwy.lat, rwy.lon, entryBearing,        35);
-  const finalPoint = offset(rwy.lat, rwy.lon, reverseHdg,          9);
+  // Aircraft on a straight-in approach: all points behind the threshold along
+  // the reverse runway heading (i.e. SE for landing on the 33s, NW for 15s).
+  const farPoint   = offset(rwy.lat, rwy.lon, reverseHdg, 85);
+  const midPoint   = offset(rwy.lat, rwy.lon, reverseHdg, 35);
+  const finalPoint = offset(rwy.lat, rwy.lon, reverseHdg, 9);
   const touchdown  = { lat: rwy.lat, lon: rwy.lon };
   const rolledOut  = rolloutEnd(rwy, 1.4);
   // Taxi mid-point between rollout end and gate.
@@ -151,17 +155,17 @@ export function buildDemoAircraft() {
     // ---- INBOUNDS ----
     buildInbound({
       callsign: 'KAC101', type: 'B772', origin: 'LHR', destination: 'OKBK',
-      gate: 'G4', runway: '33L', entryBearing: 320,
+      gate: 'G4', runway: '33L',
       entryT: 20, finalT: 80, touchdownT: 100, parkT: 150, deathT: 295,
     }),
     buildInbound({
       callsign: 'UAE855', type: 'B77W', origin: 'DXB', destination: 'OKBK',
-      gate: 'G5', runway: '33R', entryBearing: 115,
+      gate: 'G5', runway: '33R',
       entryT: 70, finalT: 130, touchdownT: 145, parkT: 195, deathT: 295,
     }),
     buildInbound({
       callsign: 'KAC411', type: 'B788', origin: 'BOM', destination: 'OKBK',
-      gate: 'G6', runway: '33L', entryBearing: 95,
+      gate: 'G6', runway: '33L',
       entryT: 165, finalT: 225, touchdownT: 240, parkT: 285, deathT: 295,
     }),
   ];
