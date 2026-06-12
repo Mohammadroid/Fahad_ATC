@@ -160,7 +160,10 @@ export function buildAircraftGroup(data) {
   group.userData.leader = leader;
 
   // 5. Heading rotation
-  group.rotation.y = THREE.MathUtils.degToRad(-(data.hdg || 0));
+  // Nose starts at +Z (south on the table since -Z = north). To point the
+  // nose along compass heading h — direction (sin h, 0, -cos h) — rotate by
+  // 180° − h. (rotation.y = -h points the TAIL along the heading.)
+  group.rotation.y = Math.PI - THREE.MathUtils.degToRad(data.hdg || 0);
 
   // 6. Async upgrade to a real glTF airliner
   upgradeToGltf(group, data, livery).catch((err) => {

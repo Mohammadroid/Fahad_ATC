@@ -255,7 +255,8 @@ export class SnapshotPlayer {
         ? 0.04 + Math.min(ac.userData.alt / 12000, 1.5) * 0.10
         : 0.005;
       ac.position.set(x, altLift, z);
-      ac.rotation.y = THREE.MathUtils.degToRad(-(ac.userData.hdg || 0));
+      // 180° − heading: see aircraft.js — nose +Z, table north = -Z.
+      ac.rotation.y = Math.PI - THREE.MathUtils.degToRad(ac.userData.hdg || 0);
 
       pulseIfActive(ac, dt);
     }

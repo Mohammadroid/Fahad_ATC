@@ -31,6 +31,8 @@ const GATES = {
   G4: { lat: 29.2345, lon: 47.9870 },
   G5: { lat: 29.2290, lon: 47.9875 },
   G6: { lat: 29.2330, lon: 47.9825 },
+  G7: { lat: 29.2310, lon: 47.9865 },
+  G8: { lat: 29.2350, lon: 47.9845 },
 };
 
 // Move from (lat, lon) by `distKm` along compass bearing `bDeg`.
@@ -152,6 +154,11 @@ export function buildDemoAircraft() {
       gate: 'G3', runway: '33R',
       pushbackT: 215, holdShortT: 245, takeoffT: 250, liftoffT: 265, exitT: 295,
     }),
+    buildOutbound({
+      callsign: 'QTR1078', type: 'B788', origin: 'OKBK', destination: 'DOH',
+      gate: 'G7', runway: '33L',
+      pushbackT: 120, holdShortT: 160, takeoffT: 165, liftoffT: 180, exitT: 290,
+    }),
     // ---- INBOUNDS ----
     buildInbound({
       callsign: 'KAC101', type: 'B772', origin: 'LHR', destination: 'OKBK',
@@ -167,6 +174,11 @@ export function buildDemoAircraft() {
       callsign: 'KAC411', type: 'B788', origin: 'BOM', destination: 'OKBK',
       gate: 'G6', runway: '33L',
       entryT: 165, finalT: 225, touchdownT: 240, parkT: 285, deathT: 295,
+    }),
+    buildInbound({
+      callsign: 'JZR223', type: 'A320', origin: 'BEY', destination: 'OKBK',
+      gate: 'G8', runway: '33R',
+      entryT: 140, finalT: 195, touchdownT: 210, parkT: 255, deathT: 295,
     }),
   ];
 }
