@@ -1,184 +1,119 @@
-// Choreographed 5-minute demo. Six aircraft on a fixed schedule with
-// well-defined runway assignments so they never conflict on the same runway
-// at the same time.
+import { latLonToTab } from '../airport.js';
+
+// Choreographed 5-minute demo, scripted DIRECTLY in tabletop world
+// coordinates (linear 1/5000 space — the same frame the airport geometry is
+// rendered in). No geo→display compression is involved, so straight lines
+// stay straight and speeds look constant. Heading is derived at runtime from
+// the motion vector, so the nose always points where the aircraft is going.
 //
-// Each aircraft has a list of waypoints {t, lat, lon, alt, hdg, state, speed_kt}.
-// The animator linearly interpolates between consecutive waypoints. State
-// strings come from the LATEST waypoint with t <= current time, so transitions
-// happen exactly at the waypoint timestamps.
+// Waypoint: { t, p:[x,z], y, state, alt, speed_kt }
+//   t        — demo seconds
+//   p        — tabletop world XZ
+//   y        — render height in world units (visual altitude)
+//   state    — ATC state for the segment STARTING at this waypoint
+//   alt      — displayed altitude (ft) for the card / lists
+//   speed_kt — displayed speed for the card
 //
-// Runway use timeline (no overlaps):
-//   33L:  30–40 JZR506 take-off · 95–115 KAC101 land · 235–255 KAC411 land
-//   33R:  55–65 FDB061 take-off · 140–160 UAE855 land · 250–265 KAC415 take-off
-
-const OKBK = { lat: 29.2266, lon: 47.9689 };
-const COS_LAT = Math.cos(OKBK.lat * Math.PI / 180);
-
-// Real OKBK thresholds (from OSM)
-const RWY = {
-  '33L': { lat: 29.2127, lon: 47.9763, hdg: 335 }, // middle runway, south thr
-  '33R': { lat: 29.2126, lon: 47.9986, hdg: 335 }, // east runway, south thr
-  '15L': { lat: 29.2412, lon: 47.9834, hdg: 155 }, // east runway, north thr
-  '15R': { lat: 29.2405, lon: 47.9615, hdg: 155 }, // middle runway, north thr
-};
-
-// Synthetic gate positions near the terminal apron (between the two civilian
-// runways, on the east apron).
-const GATES = {
-  G1: { lat: 29.2320, lon: 47.9840 },
-  G2: { lat: 29.2335, lon: 47.9855 },
-  G3: { lat: 29.2300, lon: 47.9850 },
-  G4: { lat: 29.2345, lon: 47.9870 },
-  G5: { lat: 29.2290, lon: 47.9875 },
-  G6: { lat: 29.2330, lon: 47.9825 },
-  G7: { lat: 29.2310, lon: 47.9865 },
-  G8: { lat: 29.2350, lon: 47.9845 },
-};
-
-// Move from (lat, lon) by `distKm` along compass bearing `bDeg`.
-function offset(lat, lon, bDeg, distKm) {
-  const r = bDeg * Math.PI / 180;
-  return {
-    lat: lat + (distKm * Math.cos(r)) / 111.32,
-    lon: lon + (distKm * Math.sin(r)) / (111.32 * Math.cos(lat * Math.PI / 180)),
-  };
-}
-
-function rolloutEnd(rwy, lengthKm = 1.2) {
-  return offset(rwy.lat, rwy.lon, rwy.hdg, lengthKm);
-}
-
-function liftoffPoint(rwy, lengthKm = 1.6) {
-  return offset(rwy.lat, rwy.lon, rwy.hdg, lengthKm);
-}
-
-// Build an OUTBOUND aircraft script (parked → taxi → take-off → climb-out).
-function buildOutbound({
-  callsign, type, origin, destination,
-  gate, runway,
-  pushbackT, holdShortT, takeoffT, liftoffT, exitT,
-}) {
-  const g = GATES[gate];
-  const rwy = RWY[runway];
-
-  // Hold-short point: just south-east of the threshold on the taxiway.
-  const holdShort = offset(rwy.lat, rwy.lon, rwy.hdg + 180, 0.05);
-  const liftoff = liftoffPoint(rwy, 1.6);
-  const climb1   = offset(liftoff.lat, liftoff.lon, rwy.hdg, 15);
-  const climb2   = offset(liftoff.lat, liftoff.lon, rwy.hdg, 35);
-  const exit     = offset(liftoff.lat, liftoff.lon, rwy.hdg, 70);
-
-  // Hdg from gate toward hold-short for the taxi leg
-  const dxKm = (holdShort.lon - g.lon) * 111.32 * COS_LAT;
-  const dyKm = (holdShort.lat - g.lat) * 111.32;
-  const taxiHdg = Math.round(((Math.atan2(dxKm, dyKm) * 180 / Math.PI) + 360) % 360);
-
-  return {
-    callsign, type, origin, destination,
-    birth: 0,
-    death: exitT,
-    script: [
-      { t: 0,             lat: g.lat,         lon: g.lon,         alt: 0,     hdg: 270,    state: 'PARKED',       speed_kt: 0 },
-      { t: pushbackT,     lat: g.lat,         lon: g.lon,         alt: 0,     hdg: 270,    state: 'PARKED',       speed_kt: 0 },
-      { t: pushbackT + 8, lat: holdShort.lat, lon: holdShort.lon, alt: 0,     hdg: taxiHdg, state: 'TAXI',        speed_kt: 12 },
-      { t: holdShortT,    lat: holdShort.lat, lon: holdShort.lon, alt: 0,     hdg: rwy.hdg, state: 'QUEUED',      speed_kt: 0 },
-      { t: takeoffT,      lat: rwy.lat,       lon: rwy.lon,       alt: 0,     hdg: rwy.hdg, state: 'CLEARED',     speed_kt: 30 },
-      { t: liftoffT,      lat: liftoff.lat,   lon: liftoff.lon,   alt: 50,    hdg: rwy.hdg, state: 'AIRBORNE_OUT', speed_kt: 160 },
-      { t: liftoffT + 25, lat: climb1.lat,    lon: climb1.lon,    alt: 4000,  hdg: rwy.hdg, state: 'AIRBORNE_OUT', speed_kt: 240 },
-      { t: liftoffT + 55, lat: climb2.lat,    lon: climb2.lon,    alt: 11000, hdg: rwy.hdg, state: 'AIRBORNE_OUT', speed_kt: 320 },
-      { t: exitT,         lat: exit.lat,      lon: exit.lon,      alt: 24000, hdg: rwy.hdg, state: 'AIRBORNE_OUT', speed_kt: 400 },
-    ],
-  };
-}
-
-// Build an INBOUND aircraft script (far → final → touchdown → taxi → park).
-// All approach waypoints sit on the extended runway centerline so the aircraft
-// flies straight in. `entryBearing` is no longer used — it caused waypoints to
-// zig-zag across the runway and the aircraft visibly flew backwards.
-function buildInbound({
-  callsign, type, origin, destination,
-  gate, runway,
-  entryT, finalT, touchdownT, parkT, deathT,
-}) {
-  const g = GATES[gate];
-  const rwy = RWY[runway];
-  const reverseHdg = (rwy.hdg + 180) % 360;
-
-  // Aircraft on a straight-in approach: all points behind the threshold along
-  // the reverse runway heading (i.e. SE for landing on the 33s, NW for 15s).
-  const farPoint   = offset(rwy.lat, rwy.lon, reverseHdg, 85);
-  const midPoint   = offset(rwy.lat, rwy.lon, reverseHdg, 35);
-  const finalPoint = offset(rwy.lat, rwy.lon, reverseHdg, 9);
-  const touchdown  = { lat: rwy.lat, lon: rwy.lon };
-  const rolledOut  = rolloutEnd(rwy, 1.4);
-  // Taxi mid-point between rollout end and gate.
-  const taxiMid = {
-    lat: (rolledOut.lat + g.lat) / 2,
-    lon: (rolledOut.lon + g.lon) / 2,
-  };
-
-  return {
-    callsign, type, origin, destination,
-    birth: entryT,
-    death: deathT,
-    script: [
-      { t: entryT,               lat: farPoint.lat,   lon: farPoint.lon,   alt: 13000, hdg: rwy.hdg, state: 'AIRBORNE_IN', speed_kt: 320 },
-      { t: (entryT + finalT)/2,  lat: midPoint.lat,   lon: midPoint.lon,   alt: 6000,  hdg: rwy.hdg, state: 'AIRBORNE_IN', speed_kt: 240 },
-      { t: finalT,               lat: finalPoint.lat, lon: finalPoint.lon, alt: 800,   hdg: rwy.hdg, state: 'AIRBORNE_IN', speed_kt: 160 },
-      { t: touchdownT,           lat: touchdown.lat,  lon: touchdown.lon,  alt: 0,     hdg: rwy.hdg, state: 'CLEARED',     speed_kt: 135 },
-      { t: touchdownT + 12,      lat: rolledOut.lat,  lon: rolledOut.lon,  alt: 0,     hdg: rwy.hdg, state: 'TAXI',        speed_kt: 30 },
-      { t: touchdownT + 22,      lat: taxiMid.lat,    lon: taxiMid.lon,    alt: 0,     hdg: 90,      state: 'TAXI',        speed_kt: 15 },
-      { t: parkT,                lat: g.lat,          lon: g.lon,          alt: 0,     hdg: 270,     state: 'PARKED',      speed_kt: 0 },
-      { t: deathT,               lat: g.lat,          lon: g.lon,          alt: 0,     hdg: 270,     state: 'PARKED',      speed_kt: 0 },
-    ],
-  };
-}
+// Runway occupancy (no overlaps):
+//   33L: KAC101 land 45-60 · QTR1078 roll 115-127 · KAC411 land 180-195 · KAC415 roll 245-257
+//   33R: JZR506 roll 50-62  · UAE855 land 115-130 · FDB061 roll 180-192  · JZR223 land 240-255
 
 export const DEMO_CYCLE_SECONDS = 300;
 
+// Real OKBK runway geometry (OSM) → tabletop world coords.
+function runway(thrLat, thrLon, endLat, endLon) {
+  const [tx, tz] = latLonToTab(thrLat, thrLon);
+  const [ex, ez] = latLonToTab(endLat, endLon);
+  const dx = ex - tx, dz = ez - tz;
+  const len = Math.hypot(dx, dz);
+  const u = [dx / len, dz / len];          // unit vector: threshold → far end
+  const perp = [-u[1], u[0]];              // 90° left of u (east side for the 33s)
+  return { thr: [tx, tz], end: [ex, ez], u, perp, len };
+}
+
+const RWY_33L = runway(29.2127, 47.9763, 29.2405, 47.9615); // middle runway
+const RWY_33R = runway(29.2126, 47.9986, 29.2412, 47.9834); // east runway
+
+// Gate positions on the terminal apron (east of 33L) → world coords.
+const GATE_LL = [
+  [29.2320, 47.9840], [29.2335, 47.9855], [29.2300, 47.9850],
+  [29.2345, 47.9870], [29.2290, 47.9875], [29.2330, 47.9825],
+  [29.2310, 47.9865], [29.2350, 47.9845],
+];
+const GATES = GATE_LL.map(([la, lo]) => latLonToTab(la, lo));
+
+// p + u*k  (2-vector helper)
+const along = (p, u, k) => [p[0] + u[0] * k, p[1] + u[1] * k];
+
+const GROUND_Y = 0.006;
+
+// ---------------------------------------------------------------------------
+// Arrival: glide in along the extended centerline, touch down, roll out,
+// taxi to gate, park until end of cycle.
+function arrival({ callsign, type, origin, gate, rwy, entryT, touchdownT, parkT }) {
+  const appStart   = along(rwy.thr, rwy.u, -0.50);   // 0.50 wu behind threshold
+  const shortFinal = along(rwy.thr, rwy.u, -0.12);
+  const rollEnd    = along(rwy.thr, rwy.u,  0.40);
+  const g          = GATES[gate];
+  const finalT     = touchdownT - 12;                // short-final fix
+  const rollT      = touchdownT + 15;
+  const taxiMidT   = (rollT + parkT) / 2;
+  const taxiMid    = [(rollEnd[0] + g[0]) / 2, (rollEnd[1] + g[1]) / 2];
+
+  return {
+    callsign, type, origin, destination: 'OKBK',
+    birth: entryT, death: DEMO_CYCLE_SECONDS - 2,
+    script: [
+      { t: entryT,     p: appStart,   y: 0.150,    state: 'AIRBORNE_IN', alt: 8000, speed_kt: 230 },
+      { t: finalT,     p: shortFinal, y: 0.040,    state: 'AIRBORNE_IN', alt: 1200, speed_kt: 155 },
+      { t: touchdownT, p: rwy.thr,    y: GROUND_Y, state: 'CLEARED',     alt: 0,    speed_kt: 140 },
+      { t: rollT,      p: rollEnd,    y: GROUND_Y, state: 'TAXI',        alt: 0,    speed_kt: 25 },
+      { t: taxiMidT,   p: taxiMid,    y: GROUND_Y, state: 'TAXI',        alt: 0,    speed_kt: 15 },
+      { t: parkT,      p: g,          y: GROUND_Y, state: 'PARKED',      alt: 0,    speed_kt: 0 },
+      { t: DEMO_CYCLE_SECONDS, p: g,  y: GROUND_Y, state: 'PARKED',      alt: 0,    speed_kt: 0 },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Departure: parked at gate, taxi to hold-short beside the threshold, line
+// up, take off, climb straight out, leave the table.
+function departure({ callsign, type, destination, gate, rwy, pushT, holdT, rollT, exitT }) {
+  const g         = GATES[gate];
+  const holdShort = along(along(rwy.thr, rwy.u, 0.02), rwy.perp, -0.035); // beside thr
+  const liftoff   = along(rwy.thr, rwy.u, 0.35);
+  const exitP     = along(rwy.thr, rwy.u, 1.05);
+  const lineupT   = holdT + 6;
+  const liftoffT  = rollT + 12;
+
+  return {
+    callsign, type, origin: 'OKBK', destination,
+    birth: 0, death: exitT,
+    script: [
+      { t: 0,        p: g,          y: GROUND_Y, state: 'PARKED',       alt: 0,     speed_kt: 0 },
+      { t: pushT,    p: g,          y: GROUND_Y, state: 'TAXI',         alt: 0,     speed_kt: 0 },
+      { t: holdT,    p: holdShort,  y: GROUND_Y, state: 'QUEUED',       alt: 0,     speed_kt: 14 },
+      { t: lineupT,  p: rwy.thr,    y: GROUND_Y, state: 'QUEUED',       alt: 0,     speed_kt: 8 },
+      { t: rollT,    p: rwy.thr,    y: GROUND_Y, state: 'CLEARED',      alt: 0,     speed_kt: 40 },
+      { t: liftoffT, p: liftoff,    y: 0.015,    state: 'AIRBORNE_OUT', alt: 300,   speed_kt: 165 },
+      { t: exitT,    p: exitP,      y: 0.160,    state: 'AIRBORNE_OUT', alt: 16000, speed_kt: 330 },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
+
 export function buildDemoAircraft() {
   return [
-    // ---- OUTBOUNDS ----
-    buildOutbound({
-      callsign: 'JZR506', type: 'A320', origin: 'OKBK', destination: 'DOH',
-      gate: 'G1', runway: '33L',
-      pushbackT: 5, holdShortT: 25, takeoffT: 30, liftoffT: 45, exitT: 180,
-    }),
-    buildOutbound({
-      callsign: 'FDB061', type: 'B738', origin: 'OKBK', destination: 'DXB',
-      gate: 'G2', runway: '33R',
-      pushbackT: 25, holdShortT: 50, takeoffT: 55, liftoffT: 70, exitT: 200,
-    }),
-    buildOutbound({
-      callsign: 'KAC415', type: 'A332', origin: 'OKBK', destination: 'DEL',
-      gate: 'G3', runway: '33R',
-      pushbackT: 215, holdShortT: 245, takeoffT: 250, liftoffT: 265, exitT: 295,
-    }),
-    buildOutbound({
-      callsign: 'QTR1078', type: 'B788', origin: 'OKBK', destination: 'DOH',
-      gate: 'G7', runway: '33L',
-      pushbackT: 120, holdShortT: 160, takeoffT: 165, liftoffT: 180, exitT: 290,
-    }),
-    // ---- INBOUNDS ----
-    buildInbound({
-      callsign: 'KAC101', type: 'B772', origin: 'LHR', destination: 'OKBK',
-      gate: 'G4', runway: '33L',
-      entryT: 20, finalT: 80, touchdownT: 100, parkT: 150, deathT: 295,
-    }),
-    buildInbound({
-      callsign: 'UAE855', type: 'B77W', origin: 'DXB', destination: 'OKBK',
-      gate: 'G5', runway: '33R',
-      entryT: 70, finalT: 130, touchdownT: 145, parkT: 195, deathT: 295,
-    }),
-    buildInbound({
-      callsign: 'KAC411', type: 'B788', origin: 'BOM', destination: 'OKBK',
-      gate: 'G6', runway: '33L',
-      entryT: 165, finalT: 225, touchdownT: 240, parkT: 285, deathT: 295,
-    }),
-    buildInbound({
-      callsign: 'JZR223', type: 'A320', origin: 'BEY', destination: 'OKBK',
-      gate: 'G8', runway: '33R',
-      entryT: 140, finalT: 195, touchdownT: 210, parkT: 255, deathT: 295,
-    }),
+    // Arrivals — alternating runways, one on approach almost continuously.
+    arrival({ callsign: 'KAC101', type: 'B772', origin: 'LHR', gate: 0, rwy: RWY_33L, entryT: 2,   touchdownT: 45,  parkT: 85 }),
+    arrival({ callsign: 'UAE855', type: 'B77W', origin: 'DXB', gate: 3, rwy: RWY_33R, entryT: 70,  touchdownT: 115, parkT: 155 }),
+    arrival({ callsign: 'KAC411', type: 'B788', origin: 'BOM', gate: 5, rwy: RWY_33L, entryT: 135, touchdownT: 180, parkT: 220 }),
+    arrival({ callsign: 'JZR223', type: 'A320', origin: 'BEY', gate: 7, rwy: RWY_33R, entryT: 195, touchdownT: 240, parkT: 280 }),
+    // Departures — interleaved on the opposite runway of whoever is landing.
+    departure({ callsign: 'JZR506',  type: 'A320', destination: 'DOH', gate: 1, rwy: RWY_33R, pushT: 10,  holdT: 40,  rollT: 50,  exitT: 110 }),
+    departure({ callsign: 'QTR1078', type: 'B788', destination: 'DOH', gate: 2, rwy: RWY_33L, pushT: 75,  holdT: 105, rollT: 115, exitT: 175 }),
+    departure({ callsign: 'FDB061',  type: 'B738', destination: 'DXB', gate: 4, rwy: RWY_33R, pushT: 140, holdT: 170, rollT: 180, exitT: 240 }),
+    departure({ callsign: 'KAC415',  type: 'A332', destination: 'DEL', gate: 6, rwy: RWY_33L, pushT: 205, holdT: 235, rollT: 245, exitT: 298 }),
   ];
 }

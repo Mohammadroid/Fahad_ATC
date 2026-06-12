@@ -75,15 +75,27 @@ export class SnapshotPlayer {
         origin: def.origin,
         destination: def.destination,
         state: wp0.state,
-        lat: wp0.lat, lon: wp0.lon, alt: wp0.alt, hdg: wp0.hdg,
+        alt: wp0.alt,
+        hdg: 0,
         speed_kt: wp0.speed_kt,
         on_ground: wp0.alt < 100,
         dist_nm: 0,
+        lat: null, lon: null,
       };
       const group = buildAircraftGroup(data);
-      const { x, z } = compressedTabletopPos(data.lat, data.lon);
-      const altLift = data.alt > 0 ? 0.04 + Math.min(data.alt / 12000, 1.5) * 0.10 : 0.005;
-      group.position.set(x, altLift, z);
+      group.position.set(wp0.p[0], wp0.y, wp0.p[1]);
+
+      // Initial nose direction = the aircraft's first actual motion, so a
+      // parked plane doesn't snap around when it starts taxiing.
+      for (let i = 0; i < def.script.length - 1; i++) {
+        const a = def.script[i], b = def.script[i + 1];
+        const vx = b.p[0] - a.p[0], vz = b.p[1] - a.p[1];
+        if (Math.hypot(vx, vz) > 1e-6) {
+          group.rotation.y = Math.atan2(vx, vz);
+          break;
+        }
+      }
+
       group.userData._demoDef = def;
       group.visible = false; // hidden until birth time
       this.parent.add(group);
@@ -236,27 +248,33 @@ export class SnapshotPlayer {
       const dur = Math.max(b.t - a.t, 0.0001);
       const k = Math.max(0, Math.min(1, (t - a.t) / dur));
 
-      ac.userData.lat       = lerp(a.lat, b.lat, k);
-      ac.userData.lon       = lerp(a.lon, b.lon, k);
-      ac.userData.alt       = lerp(a.alt, b.alt, k);
-      ac.userData.hdg       = lerpAngle(a.hdg, b.hdg, k);
+      // Demo waypoints are in linear tabletop world coords — interpolate
+      // position directly. No geo→display compression (it warps straight
+      // lines and makes speeds wildly uneven).
+      const x = lerp(a.p[0], b.p[0], k);
+      const z = lerp(a.p[1], b.p[1], k);
+      const y = lerp(a.y, b.y, k);
+      ac.position.set(x, y, z);
+
+      // Nose follows the motion vector — immune to compass-convention bugs.
+      // Stationary segments keep the previous orientation.
+      const vx = b.p[0] - a.p[0];
+      const vz = b.p[1] - a.p[1];
+      if (Math.hypot(vx, vz) > 1e-6) {
+        ac.rotation.y = Math.atan2(vx, vz);
+        // Compass heading for the card: x = east, -z = north.
+        ac.userData.hdg = Math.round((Math.atan2(vx, -vz) * 180 / Math.PI + 360) % 360);
+      }
+
+      ac.userData.alt       = Math.round(lerp(a.alt, b.alt, k));
       ac.userData.speed_kt  = Math.round(lerp(a.speed_kt, b.speed_kt, k));
-      ac.userData.state     = a.state; // current segment owns state until next waypoint
+      ac.userData.state     = a.state; // segment owns state until next waypoint
       ac.userData.on_ground = ac.userData.alt < 100;
-
-      // dist for the inbound/outbound panel filter
-      const dxKm = (ac.userData.lon - 47.9689) * 111.32 * COS_LAT;
-      const dyKm = (ac.userData.lat - 29.2266) * 111.32;
-      const distKm = Math.hypot(dxKm, dyKm);
-      ac.userData.dist_nm = Math.round(distKm / 1.852);
-
-      const { x, z } = compressedTabletopPos(ac.userData.lat, ac.userData.lon);
-      const altLift = ac.userData.alt > 0
-        ? 0.04 + Math.min(ac.userData.alt / 12000, 1.5) * 0.10
-        : 0.005;
-      ac.position.set(x, altLift, z);
-      // 180° − heading: see aircraft.js — nose +Z, table north = -Z.
-      ac.rotation.y = Math.PI - THREE.MathUtils.degToRad(ac.userData.hdg || 0);
+      // World units → metres (×5000) → nm, for the panel sort + pulse logic.
+      ac.userData.dist_nm = Math.round(Math.hypot(x, z) * 5000 / 1852);
+      // Approx lat/lon so the card's ETA / route math still works.
+      ac.userData.lon = 47.9689 + (x * 5000) / (111320 * COS_LAT);
+      ac.userData.lat = 29.2266 - (z * 5000) / 111320;
 
       pulseIfActive(ac, dt);
     }
