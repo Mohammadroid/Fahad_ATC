@@ -139,7 +139,20 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
 
     // 2) Grab transform updates
     updateGrabs();
+
+    // 3) Live-refresh the selected aircraft's card (telemetry changes as the
+    //    aircraft moves) and keep the card pinned beside it. Throttled to
+    //    ~6 Hz so we don't re-rasterise the canvas every frame.
+    if (selected && card.visible) {
+      positionCardForAircraft(selected);
+      _cardRefreshT += 1;
+      if (_cardRefreshT >= 10) {
+        _cardRefreshT = 0;
+        redrawCard(selected.userData);
+      }
+    }
   }
+  let _cardRefreshT = 0;
 
   // -----------------------------------------------------------
   // Ray hit detection: aircraft first, then any grabbable surface
@@ -450,6 +463,22 @@ export function setupInteraction({ scene, tabletop, hands, controllers, traffic,
     ctx.fillStyle = accent;
     ctx.font = '24px ui-sans-serif, system-ui, sans-serif';
     ctx.fillText(airline || ' ', 28, 90);
+
+    // Big INBOUND / OUTBOUND / GROUND flow badge (top-right pill)
+    const flow = flowLabel(data);
+    if (flow) {
+      ctx.font = 'bold 26px ui-sans-serif, system-ui, sans-serif';
+      const pillW = ctx.measureText(flow.text).width + 36;
+      const pillX = canvas.width - 28 - pillW;
+      ctx.fillStyle = flow.bg;
+      roundRect(ctx, pillX, 30, pillW, 44, 22);
+      ctx.fill();
+      ctx.fillStyle = flow.fg;
+      ctx.textAlign = 'center';
+      ctx.fillText(flow.text, pillX + pillW / 2, 38);
+      ctx.textAlign = 'left';
+    }
+
     ctx.strokeStyle = 'rgba(120,140,170,0.25)';
     ctx.lineWidth = 1;
     line(ctx, 28, 130, canvas.width - 28, 130);
@@ -555,7 +584,22 @@ function stateHexColor(state) {
     case 'CLEARED':      return '#33ff77';
     case 'AIRBORNE_OUT': return '#ff8844';
     case 'AIRBORNE_IN':  return '#4499ff';
+    case 'OVERFLIGHT':   return '#c89bff';
     default:             return '#ffffff';
+  }
+}
+
+// Maps a state to a high-level traffic-flow badge for the card.
+function flowLabel(data) {
+  switch (data.state) {
+    case 'AIRBORNE_IN':  return { text: '▼ INBOUND',    fg: '#06243f', bg: '#4499ff' };
+    case 'AIRBORNE_OUT': return { text: '▲ OUTBOUND',   fg: '#3a1c00', bg: '#ff8844' };
+    case 'OVERFLIGHT':   return { text: '↔ OVERFLIGHT', fg: '#1f0f33', bg: '#c89bff' };
+    case 'CLEARED':      return { text: '● ON RUNWAY',  fg: '#04220f', bg: '#33ff77' };
+    case 'TAXI':         return { text: '● TAXI',       fg: '#332900', bg: '#ffcc33' };
+    case 'QUEUED':       return { text: '● HOLDING',    fg: '#330f00', bg: '#ff6633' };
+    case 'PARKED':       return { text: '● AT GATE',    fg: '#1a1a1a', bg: '#b0b0b0' };
+    default:             return null;
   }
 }
 

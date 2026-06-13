@@ -102,18 +102,43 @@ function departure({ callsign, type, destination, gate, rwy, pushT, holdT, rollT
 }
 
 // ---------------------------------------------------------------------------
+// Overflight: high-altitude traffic crossing the airspace edge to edge, never
+// landing. Demonstrates that far / transit aircraft stay visible on the table.
+// from/to are tabletop world XZ points (typically just outside ±0.8).
+function overflight({ callsign, type, origin, destination, from, to, startT, endT, alt = 36000, speed = 440 }) {
+  return {
+    callsign, type, origin, destination,
+    birth: startT, death: endT,
+    script: [
+      { t: startT, p: from, y: 0.165, state: 'OVERFLIGHT', alt, speed_kt: speed },
+      { t: endT,   p: to,   y: 0.165, state: 'OVERFLIGHT', alt, speed_kt: speed },
+    ],
+  };
+}
 
 export function buildDemoAircraft() {
   return [
-    // Arrivals — alternating runways, one on approach almost continuously.
+    // ---- Arrivals — alternating runways, one on approach almost continuously.
     arrival({ callsign: 'KAC101', type: 'B772', origin: 'LHR', gate: 0, rwy: RWY_33L, entryT: 2,   touchdownT: 45,  parkT: 85 }),
     arrival({ callsign: 'UAE855', type: 'B77W', origin: 'DXB', gate: 3, rwy: RWY_33R, entryT: 70,  touchdownT: 115, parkT: 155 }),
     arrival({ callsign: 'KAC411', type: 'B788', origin: 'BOM', gate: 5, rwy: RWY_33L, entryT: 135, touchdownT: 180, parkT: 220 }),
     arrival({ callsign: 'JZR223', type: 'A320', origin: 'BEY', gate: 7, rwy: RWY_33R, entryT: 195, touchdownT: 240, parkT: 280 }),
-    // Departures — interleaved on the opposite runway of whoever is landing.
+    arrival({ callsign: 'GFA215', type: 'A320', origin: 'BAH', gate: 1, rwy: RWY_33R, entryT: 30,  touchdownT: 72,  parkT: 110 }),
+    arrival({ callsign: 'KNE671', type: 'A333', origin: 'JED', gate: 2, rwy: RWY_33L, entryT: 95,  touchdownT: 140, parkT: 180 }),
+
+    // ---- Departures — interleaved on the opposite runway of whoever is landing.
     departure({ callsign: 'JZR506',  type: 'A320', destination: 'DOH', gate: 1, rwy: RWY_33R, pushT: 10,  holdT: 40,  rollT: 50,  exitT: 110 }),
     departure({ callsign: 'QTR1078', type: 'B788', destination: 'DOH', gate: 2, rwy: RWY_33L, pushT: 75,  holdT: 105, rollT: 115, exitT: 175 }),
     departure({ callsign: 'FDB061',  type: 'B738', destination: 'DXB', gate: 4, rwy: RWY_33R, pushT: 140, holdT: 170, rollT: 180, exitT: 240 }),
     departure({ callsign: 'KAC415',  type: 'A332', destination: 'DEL', gate: 6, rwy: RWY_33L, pushT: 205, holdT: 235, rollT: 245, exitT: 298 }),
+    departure({ callsign: 'WJA452',  type: 'A320', destination: 'CAI', gate: 0, rwy: RWY_33R, pushT: 95,  holdT: 122, rollT: 132, exitT: 195 }),
+    departure({ callsign: 'ETD308',  type: 'A359', destination: 'AUH', gate: 3, rwy: RWY_33L, pushT: 165, holdT: 195, rollT: 205, exitT: 270 }),
+
+    // ---- Overflights — transit traffic crossing the airspace (stay visible).
+    overflight({ callsign: 'THY6E',   type: 'A333', origin: 'IST', destination: 'DXB', from: [-0.95, -0.55], to: [0.95, 0.30], startT: 5,   endT: 95,  alt: 38000 }),
+    overflight({ callsign: 'QTR8AL',  type: 'B77W', origin: 'DOH', destination: 'LHR', from: [0.55, 0.95],   to: [-0.40, -0.95], startT: 60,  endT: 150, alt: 41000 }),
+    overflight({ callsign: 'UAE201',  type: 'A388', origin: 'DXB', destination: 'JFK', from: [0.95, 0.10],   to: [-0.95, -0.20], startT: 120, endT: 215, alt: 40000 }),
+    overflight({ callsign: 'SVA445',  type: 'B789', origin: 'RUH', destination: 'IST', from: [-0.30, 0.95],  to: [0.65, -0.95], startT: 175, endT: 265, alt: 37000 }),
+    overflight({ callsign: 'IGO77',   type: 'A20N', origin: 'DEL', destination: 'KWI', from: [0.95, -0.40],  to: [-0.60, 0.95], startT: 230, endT: 298, alt: 35000 }),
   ];
 }

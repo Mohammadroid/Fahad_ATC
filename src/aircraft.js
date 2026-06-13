@@ -10,12 +10,13 @@ import { SCALE } from './airport.js';
 // Models are CC-BY 3.0 from Poly Pizza — see CREDITS.md for attribution.
 
 export const STATES = {
-  PARKED:       { color: 0xb0b0b0, label: 'PARKED'   },
-  TAXI:         { color: 0xffcc33, label: 'TAXI'     },
-  QUEUED:       { color: 0xff6633, label: 'HOLD'     },
-  CLEARED:      { color: 0x33ff77, label: 'CLEARED'  },
-  AIRBORNE_OUT: { color: 0xff8844, label: 'OUTBOUND' },
-  AIRBORNE_IN:  { color: 0x4499ff, label: 'INBOUND'  },
+  PARKED:       { color: 0xb0b0b0, label: 'PARKED'     },
+  TAXI:         { color: 0xffcc33, label: 'TAXI'       },
+  QUEUED:       { color: 0xff6633, label: 'HOLD'       },
+  CLEARED:      { color: 0x33ff77, label: 'CLEARED'    },
+  AIRBORNE_OUT: { color: 0xff8844, label: 'OUTBOUND'   },
+  AIRBORNE_IN:  { color: 0x4499ff, label: 'INBOUND'    },
+  OVERFLIGHT:   { color: 0xc89bff, label: 'OVERFLIGHT' },
 };
 
 const ACFT_SCALE = 1 / 1500;             // 3.3× exaggeration over the 1/5000 airport scale
