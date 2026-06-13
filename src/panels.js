@@ -502,7 +502,7 @@ export function drawSettingsIcon(ctx, w, h) {
 // pixel coords so the interaction layer can map a raycast UV to a button.
 
 export function drawSettingsMenu(ctx, w, h, opts) {
-  const { currentMap, currentData, currentTheme } = opts;
+  const { currentMap, currentData, currentTheme, tab = 'general', features = [] } = opts;
   const regions = [];
 
   ctx.clearRect(0, 0, w, h);
@@ -518,32 +518,100 @@ export function drawSettingsMenu(ctx, w, h, opts) {
 
   // Title
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 32px ui-sans-serif, system-ui, sans-serif';
+  ctx.font = 'bold 30px ui-sans-serif, system-ui, sans-serif';
   ctx.textBaseline = 'top';
   ctx.textAlign = 'left';
-  ctx.fillText('SETTINGS', 28, 28);
+  ctx.fillText('SETTINGS', 28, 24);
 
-  let yCursor = 90;
+  // Tab row
+  const tabY = 70, tabH = 44;
+  const tabs = [
+    { id: 'tab:general',  label: 'General',  active: tab === 'general' },
+    { id: 'tab:advanced', label: 'Advanced', active: tab === 'advanced' },
+  ];
+  const tabW = (w - 56 - 12) / 2;
+  tabs.forEach((tb, i) => {
+    const tx = 28 + i * (tabW + 12);
+    regions.push({ id: tb.id, x: tx, y: tabY, w: tabW, h: tabH });
+    ctx.fillStyle = tb.active ? '#4499ff' : 'rgba(30,40,55,0.6)';
+    roundRect(ctx, tx, tabY, tabW, tabH, 8); ctx.fill();
+    ctx.fillStyle = tb.active ? '#ffffff' : '#a8c4ff';
+    ctx.font = `${tb.active ? 'bold ' : ''}20px ui-sans-serif, system-ui, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(tb.label, tx + tabW / 2, tabY + tabH / 2);
+  });
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
 
-  yCursor = drawSection(ctx, 'MAP', 28, yCursor, w - 56, [
-    { id: 'map:osm',   label: 'Satellite', active: currentMap === 'osm' },
-    { id: 'map:cyber', label: 'Cyberpunk', active: currentMap === 'cyber' },
-    { id: 'map:tiles', label: 'Photoreal', active: currentMap === 'tiles' },
-  ], regions);
+  let yCursor = tabY + tabH + 24;
 
-  yCursor += 28;
-  yCursor = drawSection(ctx, 'DATA SOURCE', 28, yCursor, w - 56, [
-    { id: 'data:live', label: 'Live FR24',     active: currentData === 'live' },
-    { id: 'data:demo', label: 'Demo 14:00 LT', active: currentData === 'demo' },
-  ], regions);
+  if (tab === 'general') {
+    yCursor = drawSection(ctx, 'MAP', 28, yCursor, w - 56, [
+      { id: 'map:osm',   label: 'Satellite', active: currentMap === 'osm' },
+      { id: 'map:cyber', label: 'Cyberpunk', active: currentMap === 'cyber' },
+      { id: 'map:tiles', label: 'Photoreal', active: currentMap === 'tiles' },
+    ], regions);
 
-  yCursor += 28;
-  yCursor = drawSection(ctx, 'VIEW', 28, yCursor, w - 56, [
-    { id: 'theme:day',   label: '☀ Day',   active: currentTheme === 'day' },
-    { id: 'theme:night', label: '☾ Night', active: currentTheme === 'night' },
-  ], regions);
+    yCursor += 24;
+    yCursor = drawSection(ctx, 'DATA SOURCE', 28, yCursor, w - 56, [
+      { id: 'data:live', label: 'Live FR24',     active: currentData === 'live' },
+      { id: 'data:demo', label: 'Demo 14:00 LT', active: currentData === 'demo' },
+    ], regions);
+
+    yCursor += 24;
+    yCursor = drawSection(ctx, 'VIEW', 28, yCursor, w - 56, [
+      { id: 'theme:day',   label: '☀ Day',   active: currentTheme === 'day' },
+      { id: 'theme:night', label: '☾ Night', active: currentTheme === 'night' },
+    ], regions);
+  } else {
+    // Advanced — ATC feature toggles, each a full-width on/off row.
+    ctx.fillStyle = '#7d8b9e';
+    ctx.font = '16px ui-sans-serif, system-ui, sans-serif';
+    ctx.fillText('ATC FEATURES', 28, yCursor);
+    yCursor += 28;
+    for (const f of features) {
+      yCursor = drawToggleRow(ctx, 28, yCursor, w - 56, f, regions);
+      yCursor += 12;
+    }
+  }
 
   return regions;
+}
+
+// A labelled on/off toggle row. id = `feature:<featureId>`.
+function drawToggleRow(ctx, x, y, w, feature, regions) {
+  const rowH = 66;
+  regions.push({ id: `feature:${feature.id}`, x, y, w, h: rowH });
+
+  ctx.fillStyle = 'rgba(30, 40, 55, 0.55)';
+  roundRect(ctx, x, y, w, rowH, 10); ctx.fill();
+  ctx.strokeStyle = 'rgba(120,140,170,0.4)'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // Label + description
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 20px ui-sans-serif, system-ui, sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillText(feature.label, x + 16, y + 12);
+  ctx.fillStyle = '#7d8b9e';
+  ctx.font = '15px ui-sans-serif, system-ui, sans-serif';
+  ctx.fillText(feature.desc || '', x + 16, y + 38);
+
+  // Toggle pill (right side)
+  const pw = 76, ph = 36;
+  const px = x + w - pw - 16, py = y + (rowH - ph) / 2;
+  ctx.fillStyle = feature.enabled ? '#33c66a' : 'rgba(80,90,105,0.8)';
+  roundRect(ctx, px, py, pw, ph, ph / 2); ctx.fill();
+  // Knob
+  const knobR = ph / 2 - 4;
+  const knobX = feature.enabled ? px + pw - knobR - 4 : px + knobR + 4;
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(knobX, py + ph / 2, knobR, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = feature.enabled ? '#ffffff' : '#c8d0d8';
+  ctx.font = 'bold 13px ui-sans-serif, system-ui, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(feature.enabled ? 'ON' : 'OFF', feature.enabled ? px + knobR + 6 : px + pw - knobR - 6, py + ph / 2);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+
+  return y + rowH;
 }
 
 function drawSection(ctx, label, x, y, w, items, regions) {

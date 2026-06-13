@@ -10,6 +10,11 @@ import { SnapshotPlayer } from './feeds/snapshot.js';
 import { setupInteraction } from './interaction.js';
 import { SpatialPanel, drawCombinedPanel, drawSettingsIcon, drawSettingsMenu } from './panels.js';
 import { getAirlineAccent } from './aircraft.js';
+import { FEATURE_DEFS, isEnabled as featureEnabled, setEnabled as setFeatureEnabled } from './features/index.js';
+import { createConflictMonitor } from './features/conflicts.js';
+import { createEmergencyMonitor } from './features/emergency.js';
+import { createWeatherPanel } from './features/weather.js';
+import { createStripsPanel } from './features/strips.js';
 
 // URL params drive feed and airport-renderer selection.
 // Default = okbk_live.json (real FR24 data). Pass ?snapshot=<other.json> to
@@ -232,11 +237,26 @@ interaction.registerGrabbable(settingsMenu.group, {
   surfaces: [settingsMenu.mesh], kind: 'panel', minScale: 0.5, maxScale: 2.0,
 });
 
+// -----------------------------------------------------------------------
+// Advanced ATC features — each fully encapsulated in src/features/*. Created
+// once, enabled per persisted flag, updated every frame, toggled from the
+// Advanced settings tab.
+const features = {
+  conflicts: createConflictMonitor({ scene, tabletop, traffic }),
+  emergency: createEmergencyMonitor({ tabletop, traffic }),
+  weather:   createWeatherPanel({ scene, SpatialPanel, interaction }),
+  strips:    createStripsPanel({ scene, SpatialPanel, interaction, traffic }),
+};
+for (const def of FEATURE_DEFS) {
+  features[def.id]?.setEnabled(featureEnabled(def.id));
+}
+
 // Current settings state (read from URL + localStorage)
 const settingsState = {
   map: airportMode === 'cyber' ? 'cyber' : airportMode === 'tiles' ? 'tiles' : 'osm',
   data: snapshotName === 'okbk_demo.json' || snapshotName === 'okbk_today.json' ? 'demo' : 'live',
   theme: currentTheme,
+  tab: 'general',
 };
 
 let settingsRegions = [];
@@ -247,6 +267,10 @@ function redrawSettingsMenu() {
       currentMap: settingsState.map,
       currentData: settingsState.data,
       currentTheme: settingsState.theme,
+      tab: settingsState.tab,
+      features: FEATURE_DEFS.map((f) => ({
+        id: f.id, label: f.label, desc: f.desc, enabled: featureEnabled(f.id),
+      })),
     });
   });
 }
@@ -267,6 +291,18 @@ settingsMenu.group.userData.onPinchClick = (uv) => {
 
 function handleSettingsClick(id) {
   const [cat, val] = id.split(':');
+  if (cat === 'tab') {
+    settingsState.tab = val;
+    redrawSettingsMenu();
+    return;
+  }
+  if (cat === 'feature') {
+    const now = !featureEnabled(val);
+    setFeatureEnabled(val, now);
+    features[val]?.setEnabled(now);
+    redrawSettingsMenu();
+    return;
+  }
   if (cat === 'theme') {
     settingsState.theme = val;
     currentTheme = val;
@@ -351,6 +387,9 @@ renderer.setAnimationLoop((time, frame) => {
   traffic.update(dt);
   if (tilesAirport) tilesAirport.update();
   if (cyberpunkAirport?.userData?.update) cyberpunkAirport.userData.update(dt);
+
+  // Advanced ATC features (each no-ops when disabled).
+  for (const id in features) features[id].update(dt);
 
   // Combined panel follows the tabletop unless the user is actively grabbing
   // it. Position only — keep the panel facing forward; tabletop yaw doesn't

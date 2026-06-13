@@ -74,6 +74,7 @@ export class SnapshotPlayer {
         type: def.type,
         origin: def.origin,
         destination: def.destination,
+        squawk: def.squawk || null,
         state: wp0.state,
         alt: wp0.alt,
         hdg: 0,

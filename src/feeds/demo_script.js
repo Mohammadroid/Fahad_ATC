@@ -50,7 +50,7 @@ const GROUND_Y = 0.006;
 // ---------------------------------------------------------------------------
 // Arrival: glide in along the extended centerline, touch down, roll out,
 // taxi to gate, park until end of cycle.
-function arrival({ callsign, type, origin, gate, rwy, entryT, touchdownT, parkT }) {
+function arrival({ callsign, type, origin, gate, rwy, entryT, touchdownT, parkT, squawk }) {
   const appStart   = along(rwy.thr, rwy.u, -0.50);   // 0.50 wu behind threshold
   const shortFinal = along(rwy.thr, rwy.u, -0.12);
   const rollEnd    = along(rwy.thr, rwy.u,  0.40);
@@ -61,7 +61,7 @@ function arrival({ callsign, type, origin, gate, rwy, entryT, touchdownT, parkT 
   const taxiMid    = [(rollEnd[0] + g[0]) / 2, (rollEnd[1] + g[1]) / 2];
 
   return {
-    callsign, type, origin, destination: 'OKBK',
+    callsign, type, origin, destination: 'OKBK', squawk,
     birth: entryT, death: DEMO_CYCLE_SECONDS - 2,
     script: [
       { t: entryT,     p: appStart,   y: 0.150,    state: 'AIRBORNE_IN', alt: 8000, speed_kt: 230 },
@@ -124,7 +124,9 @@ export function buildDemoAircraft() {
     arrival({ callsign: 'KAC411', type: 'B788', origin: 'BOM', gate: 5, rwy: RWY_33L, entryT: 135, touchdownT: 180, parkT: 220 }),
     arrival({ callsign: 'JZR223', type: 'A320', origin: 'BEY', gate: 7, rwy: RWY_33R, entryT: 195, touchdownT: 240, parkT: 280 }),
     arrival({ callsign: 'GFA215', type: 'A320', origin: 'BAH', gate: 1, rwy: RWY_33R, entryT: 30,  touchdownT: 72,  parkT: 110 }),
-    arrival({ callsign: 'KNE671', type: 'A333', origin: 'JED', gate: 2, rwy: RWY_33L, entryT: 95,  touchdownT: 140, parkT: 180 }),
+    // KNE671 declares a general emergency (7700) — priority inbound. Shows the
+    // Emergency Squawk feature in the demo.
+    arrival({ callsign: 'KNE671', type: 'A333', origin: 'JED', gate: 2, rwy: RWY_33L, entryT: 95,  touchdownT: 140, parkT: 180, squawk: '7700' }),
 
     // ---- Departures — interleaved on the opposite runway of whoever is landing.
     departure({ callsign: 'JZR506',  type: 'A320', destination: 'DOH', gate: 1, rwy: RWY_33R, pushT: 10,  holdT: 40,  rollT: 50,  exitT: 110 }),

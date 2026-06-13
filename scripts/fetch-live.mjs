@@ -133,6 +133,7 @@ function parseFR24Aircraft(d) {
     destination: d.dest_iata || d.dest_icao || '',
     eta: d.eta || null,
     reg: d.reg || '',
+    squawk: d.squawk || null,
     dist_nm: Math.round(distNm(d.lat, d.lon)),
   };
 }
