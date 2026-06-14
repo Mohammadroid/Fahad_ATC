@@ -59,8 +59,12 @@ const LIVERIES = {
 const DEFAULT_LIVERY = { body: 0xcccccc, accent: 0x808080, name: '' };
 
 // Map ICAO type → glTF asset (relative to public/models/). Falls back to DEFAULT_MODEL.
+// NOTE: b747.glb is modelled nose-down (its fuselage centerline sits well above
+// its nose), so it flies "dipped" relative to the other models. Until a level
+// jumbo model is sourced, the 4-engine types use the clean wide-body model so
+// they fly level like everything else.
 const TYPE_TO_MODEL = {
-  B748: 'b747.glb', B747: 'b747.glb', A388: 'b747.glb',
+  B748: 'airliner_detail.glb', B747: 'airliner_detail.glb', A388: 'airliner_detail.glb',
   B788: 'b787.glb', B789: 'b787.glb', B78X: 'b787.glb',
   B772: 'airliner_detail.glb', B77W: 'airliner_detail.glb',
   A332: 'airliner_detail.glb', A333: 'airliner_detail.glb',
