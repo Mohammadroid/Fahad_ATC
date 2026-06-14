@@ -13,7 +13,7 @@ export const FEATURE_DEFS = [
   { id: 'emergency', label: 'Emergency Squawk',  default: true,  desc: '7500 / 7600 / 7700 highlight' },
   { id: 'notams',    label: 'NOTAMs',            default: true,  desc: 'Closed RWY/TWY, obstacles, U/S' },
   { id: 'weather',   label: 'Weather Panel',     default: true,  desc: 'METAR + wind + active runway' },
-  { id: 'strips',    label: 'Flight Strips',     default: false, desc: 'Electronic strip board' },
+  { id: 'strips',    label: 'Flight Strips',     default: true,  desc: 'Electronic strip board' },
 ];
 
 export function isEnabled(id) {

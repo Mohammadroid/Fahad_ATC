@@ -16,6 +16,7 @@ import { createEmergencyMonitor } from './features/emergency.js';
 import { createWeatherPanel } from './features/weather.js';
 import { createStripsPanel } from './features/strips.js';
 import { createNotamMonitor } from './features/notams.js';
+import { PanelDock } from './dock.js';
 
 // URL params drive feed and airport-renderer selection.
 // Default = okbk_live.json (real FR24 data). Pass ?snapshot=<other.json> to
@@ -203,29 +204,16 @@ const interaction = setupInteraction({
 // also clickable via userData.onPinchClick (interaction.js reads UV from
 // the raycast hit).
 
-// Combined panel — relative to tabletop (offset = above + slightly back). User
-// can pinch + drag to override the offset; release re-syncs the offset.
+// Combined panel — the MAIN panel of the docked row. Uniform height 0.50.
 const combinedPanel = new SpatialPanel({
   name: 'combined',
-  width: 0.80, height: 0.56, canvasW: 1000, canvasH: 720,
+  width: 0.80, height: 0.50, canvasW: 1120, canvasH: 700,
   anchor: new THREE.Vector3(0, 1.45, -1.0),
   faceTarget: new THREE.Vector3(0, 1.4, 0),
 });
 scene.add(combinedPanel.group);
-let combinedGrabbed = false;
-const combinedOffset = new THREE.Vector3(0, 0.85, -0.30); // above tabletop + back
-interaction.registerGrabbable(combinedPanel.group, {
-  surfaces: [combinedPanel.mesh],
-  kind: 'panel', minScale: 0.4, maxScale: 3.0,
-  onGrabStart: () => { combinedGrabbed = true; },
-  onGrabEnd: () => {
-    combinedGrabbed = false;
-    combinedOffset.copy(combinedPanel.group.position).sub(tabletop.position);
-  },
-});
 
-// Settings menu (still a separate panel, but only created once and hidden
-// until the gear region in the combined panel is pinched).
+// Settings menu — floats above the main panel when opened via the gear.
 const settingsMenu = new SpatialPanel({
   name: 'settings-menu',
   width: 0.44, height: 0.50, canvasW: 560, canvasH: 640,
@@ -252,6 +240,19 @@ const features = {
 for (const def of FEATURE_DEFS) {
   features[def.id]?.setEnabled(featureEnabled(def.id));
 }
+
+// -----------------------------------------------------------------------
+// Panel dock — lays out NOTAMs | MAIN | Weather | Strips as one uniform-height
+// row that follows the tabletop. Each panel has a Home + Collapse header.
+const dock = new PanelDock({
+  scene, interaction, tabletop,
+  offset: new THREE.Vector3(0, 0.85, -0.30), // above + behind tabletop
+});
+dock.setOrientation(combinedPanel.group.quaternion.clone());
+dock.add({ key: 'notams',   panel: features.notams.panel,   title: 'NOTAMs',   accent: '#ff8844', side: 'left',  isActive: () => featureEnabled('notams') });
+dock.add({ key: 'combined', panel: combinedPanel,            title: 'OKBK TWR', accent: '#4499ff', side: 'main' });
+dock.add({ key: 'weather',  panel: features.weather.panel,   title: 'WEATHER',  accent: '#33c6a8', side: 'right', isActive: () => featureEnabled('weather') });
+dock.add({ key: 'strips',   panel: features.strips.panel,    title: 'STRIPS',   accent: '#9a7dff', side: 'right', isActive: () => featureEnabled('strips') });
 
 // Current settings state (read from URL + localStorage)
 const settingsState = {
@@ -393,47 +394,17 @@ renderer.setAnimationLoop((time, frame) => {
   // Advanced ATC features (each no-ops when disabled).
   for (const id in features) features[id].update(dt);
 
-  // Combined panel follows the tabletop unless the user is actively grabbing
-  // it. Position only — keep the panel facing forward; tabletop yaw doesn't
-  // rotate the panel so the info stays readable.
-  if (!combinedGrabbed) {
-    combinedPanel.group.position.copy(tabletop.position).add(combinedOffset);
+  // Lay out the whole panel row (follows the tabletop).
+  dock.update();
+
+  // Settings menu floats just above the main panel when open.
+  if (settingsMenu.group.visible) {
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(combinedPanel.group.quaternion);
+    settingsMenu.group.position.copy(combinedPanel.group.position)
+      .addScaledVector(up, combinedPanel.height / 2 + settingsMenu.height / 2 + 0.10);
+    settingsMenu.group.quaternion.copy(combinedPanel.group.quaternion);
   }
 
-  layoutDockedPanels();
   refreshPanels();
   renderer.render(scene, camera);
 });
-
-// Keep the settings menu and the weather panel docked to the combined panel so
-// they stay reachable after the user repositions the tabletop / panel. The
-// settings menu sits to the right of the combined panel; the weather panel
-// sits just to the right of the settings menu ("at the side of the menu").
-const _dockRight = new THREE.Vector3();
-const _dockUp = new THREE.Vector3();
-function layoutDockedPanels() {
-  const cp = combinedPanel.group;
-  cp.getWorldDirection(_dockRight);            // forward (-Z of panel)
-  // right vector = up × forward; use world up
-  _dockUp.set(0, 1, 0);
-  _dockRight.crossVectors(_dockUp, _dockRight).normalize(); // panel's right in world
-
-  // Settings menu — only repositioned while hidden so the user can still drag
-  // it somewhere custom while it's open.
-  if (!settingsMenu.group.visible) {
-    settingsMenu.group.position.copy(cp.position).addScaledVector(_dockRight, 0.66);
-    settingsMenu.group.quaternion.copy(cp.quaternion);
-  }
-  // Weather panel docks just beyond the settings menu (its "side").
-  const wx = features.weather?.group;
-  if (wx && wx.visible) {
-    wx.position.copy(settingsMenu.group.position).addScaledVector(_dockRight, 0.46);
-    wx.quaternion.copy(cp.quaternion);
-  }
-  // NOTAM panel docks to the LEFT of the combined panel.
-  const nx = features.notams?.group;
-  if (nx && nx.visible) {
-    nx.position.copy(cp.position).addScaledVector(_dockRight, -0.62);
-    nx.quaternion.copy(cp.quaternion);
-  }
-}

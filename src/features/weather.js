@@ -11,15 +11,12 @@ export function createWeatherPanel({ scene, SpatialPanel, interaction }) {
 
   const panel = new SpatialPanel({
     name: 'weather',
-    width: 0.34, height: 0.40, canvasW: 520, canvasH: 620,
+    width: 0.40, height: 0.50, canvasW: 576, canvasH: 720,
     anchor: new THREE.Vector3(-0.85, 1.45, -0.75),
     faceTarget: new THREE.Vector3(0, 1.4, 0),
   });
   scene.add(panel.group);
   panel.group.visible = false;
-  interaction.registerGrabbable(panel.group, {
-    surfaces: [panel.mesh], kind: 'panel', minScale: 0.5, maxScale: 2.0,
-  });
 
   // Base OKBK conditions; wind direction drifts slowly for a live feel.
   const base = { windDir: 330, windKt: 12, gust: 18, vis: 9999, temp: 38, dew: 9, qnh: 1009 };
@@ -119,7 +116,7 @@ export function createWeatherPanel({ scene, SpatialPanel, interaction }) {
   function isEnabled() { return enabled; }
   function dispose() { scene.remove(panel.group); }
 
-  return { setEnabled, isEnabled, update, dispose, group: panel.group };
+  return { setEnabled, isEnabled, update, dispose, group: panel.group, panel };
 }
 
 function roundRect(ctx, x, y, w, h, r) {

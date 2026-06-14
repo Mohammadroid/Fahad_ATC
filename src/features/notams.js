@@ -42,15 +42,12 @@ export function createNotamMonitor({ scene, tabletop, SpatialPanel, interaction 
   // Panel
   const panel = new SpatialPanel({
     name: 'notams',
-    width: 0.36, height: 0.50, canvasW: 560, canvasH: 780,
+    width: 0.40, height: 0.50, canvasW: 576, canvasH: 720,
     anchor: new THREE.Vector3(-0.95, 1.45, -0.75),
     faceTarget: new THREE.Vector3(0, 1.4, 0),
   });
   scene.add(panel.group);
   panel.group.visible = false;
-  interaction.registerGrabbable(panel.group, {
-    surfaces: [panel.mesh], kind: 'panel', minScale: 0.5, maxScale: 2.0,
-  });
 
   // Load data + build everything.
   (async () => {
@@ -205,7 +202,7 @@ export function createNotamMonitor({ scene, tabletop, SpatialPanel, interaction 
     return y + rowH;
   }
 
-  return { setEnabled, isEnabled, update, dispose, group: panel.group };
+  return { setEnabled, isEnabled, update, dispose, group: panel.group, panel };
 }
 
 // ---- shared helpers ----
