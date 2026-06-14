@@ -22,9 +22,49 @@ export class PanelDock {
     this.offset = offset.clone();
     this.quat = new THREE.Quaternion();
     this.entries = [];
+    this.manualShift = new THREE.Vector3(); // user drag of the whole row
+    this.handleGrabbed = false;
+    this._makeMoveHandle();
   }
 
   setOrientation(q) { this.quat.copy(q); }
+
+  // The "move all" anchor — a grip bar under the main panel. Dragging it
+  // translates the entire docked row (all non-floating panels move together).
+  _makeMoveHandle() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 420; canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'rgba(31, 111, 235, 0.92)';
+    roundRect(ctx, 0, 0, canvas.width, canvas.height, 14); ctx.fill();
+    ctx.strokeStyle = '#7dd3ff'; ctx.lineWidth = 2.5; ctx.stroke();
+    // grip dots
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    for (let r = 0; r < 2; r++) for (let c = 0; c < 4; c++) {
+      ctx.beginPath(); ctx.arc(28 + c * 11, 24 + r * 14, 3, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 26px ui-sans-serif, system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('✥  MOVE ALL', canvas.width / 2 + 24, canvas.height / 2);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.minFilter = THREE.LinearFilter; tex.anisotropy = 4;
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.30, 0.046),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
+    );
+    mesh.renderOrder = 18;
+    const group = new THREE.Group();
+    group.add(mesh);
+    this.scene.add(group);
+    this.moveHandle = { group, mesh };
+
+    this.interaction.registerGrabbable(group, {
+      surfaces: [mesh], kind: 'panel', minScale: 1, maxScale: 1,
+      onGrabStart: () => { this.handleGrabbed = true; },
+      onGrabEnd:   () => { this.handleGrabbed = false; },
+    });
+  }
 
   // cfg: { key, panel, title, accent, side:'left'|'right'|'main',
   //        collapsible:bool, isActive:()=>bool }
@@ -89,7 +129,22 @@ export class PanelDock {
   update() {
     const R = new THREE.Vector3(1, 0, 0).applyQuaternion(this.quat);
     const U = new THREE.Vector3(0, 1, 0).applyQuaternion(this.quat);
-    const anchor = this.tabletop.position.clone().add(this.offset);
+
+    const main0 = this.entries.find((e) => e.side === 'main');
+    const mainHalf = (main0 ? main0.panel.height : 0.5) / 2;
+    const down = U.clone().multiplyScalar(-(mainHalf + 0.07));
+    const base = this.tabletop.position.clone().add(this.offset);
+
+    // Move-all handle drives the row's manual shift.
+    let anchor;
+    if (this.handleGrabbed) {
+      anchor = this.moveHandle.group.position.clone().sub(down);
+      this.manualShift.copy(anchor).sub(base);
+    } else {
+      anchor = base.clone().add(this.manualShift);
+      this.moveHandle.group.position.copy(anchor).add(down);
+      this.moveHandle.group.quaternion.copy(this.quat);
+    }
 
     for (const e of this.entries) {
       e._active = e.isActive ? e.isActive() : true;
