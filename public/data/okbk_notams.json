@@ -1,0 +1,67 @@
+{
+  "source": "curated",
+  "note": "Phase A curated OKBK NOTAMs for demo. Q-codes are real ICAO codes; E) text follows NOTAM convention. Replace with live FAA NOTAM API feed in Phase B.",
+  "updated": "2026-06-14T09:00:00Z",
+  "notams": [
+    {
+      "id": "A0419/26",
+      "qcode": "QMRLC",
+      "subject": "RWY",
+      "severity": "critical",
+      "target": { "type": "runway", "ref": "16/34" },
+      "from": "2026-06-07T00:00:00Z",
+      "to": "2026-07-31T23:59:00Z",
+      "text": "RWY 16/34 CLSD DUE TO MIL OPS. NOT AVBL FOR CIVIL ACFT."
+    },
+    {
+      "id": "A0412/26",
+      "qcode": "QMXLC",
+      "subject": "TWY",
+      "severity": "caution",
+      "target": { "type": "taxiway", "ref": "E1" },
+      "from": "2026-06-10T00:00:00Z",
+      "to": "2026-06-25T23:59:00Z",
+      "text": "TWY E1 CLSD DUE WIP. ACFT TAXI VIA TWY E2."
+    },
+    {
+      "id": "A0421/26",
+      "qcode": "QICAS",
+      "subject": "ILS",
+      "severity": "caution",
+      "target": { "type": "none" },
+      "from": "2026-06-12T06:00:00Z",
+      "to": "2026-06-18T18:00:00Z",
+      "text": "ILS RWY 33L (LLZ/GP) U/S. EXP RNP APCH."
+    },
+    {
+      "id": "A0425/26",
+      "qcode": "QLPAS",
+      "subject": "PAPI",
+      "severity": "caution",
+      "target": { "type": "none" },
+      "from": "2026-06-13T00:00:00Z",
+      "to": "2026-06-20T23:59:00Z",
+      "text": "PAPI RWY 15L U/S."
+    },
+    {
+      "id": "A0430/26",
+      "qcode": "QOBCE",
+      "subject": "OBST",
+      "severity": "caution",
+      "target": { "type": "point", "lat": 29.2480, "lon": 47.9520, "height_ft": 280 },
+      "from": "2026-06-01T00:00:00Z",
+      "to": "2026-09-30T23:59:00Z",
+      "text": "CRANE ERECTED 1.4NM NW OF ARP. 280FT AMSL. LGTD."
+    },
+    {
+      "id": "A0440/26",
+      "qcode": "QFAHW",
+      "subject": "WILDLIFE",
+      "severity": "info",
+      "target": { "type": "none" },
+      "from": "2026-06-14T03:00:00Z",
+      "to": "2026-06-14T15:00:00Z",
+      "text": "BIRD ACTIVITY VICINITY ARP. EXER CAUTION ON APCH/DEP."
+    }
+  ]
+}

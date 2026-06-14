@@ -15,6 +15,7 @@ import { createConflictMonitor } from './features/conflicts.js';
 import { createEmergencyMonitor } from './features/emergency.js';
 import { createWeatherPanel } from './features/weather.js';
 import { createStripsPanel } from './features/strips.js';
+import { createNotamMonitor } from './features/notams.js';
 
 // URL params drive feed and airport-renderer selection.
 // Default = okbk_live.json (real FR24 data). Pass ?snapshot=<other.json> to
@@ -244,6 +245,7 @@ interaction.registerGrabbable(settingsMenu.group, {
 const features = {
   conflicts: createConflictMonitor({ scene, tabletop, traffic }),
   emergency: createEmergencyMonitor({ tabletop, traffic }),
+  notams:    createNotamMonitor({ scene, tabletop, SpatialPanel, interaction }),
   weather:   createWeatherPanel({ scene, SpatialPanel, interaction }),
   strips:    createStripsPanel({ scene, SpatialPanel, interaction, traffic }),
 };
@@ -427,5 +429,11 @@ function layoutDockedPanels() {
   if (wx && wx.visible) {
     wx.position.copy(settingsMenu.group.position).addScaledVector(_dockRight, 0.46);
     wx.quaternion.copy(cp.quaternion);
+  }
+  // NOTAM panel docks to the LEFT of the combined panel.
+  const nx = features.notams?.group;
+  if (nx && nx.visible) {
+    nx.position.copy(cp.position).addScaledVector(_dockRight, -0.62);
+    nx.quaternion.copy(cp.quaternion);
   }
 }
