@@ -247,16 +247,23 @@ export function drawCombinedPanel(ctx, w, h, opts) {
   ctx.fillStyle = '#4499ff';
   ctx.fillRect(0, 0, w, 8);
 
-  // ---- gear icon (top-right) ----
-  const gearSize = 56;
-  const gearPad = 18;
+  // ---- gear icon (top-right) — generous hit target ----
+  const gearSize = 96;
+  const gearPad = 14;
   const gearRegion = {
     x: w - gearSize - gearPad,
     y: gearPad,
     w: gearSize,
     h: gearSize,
   };
-  drawGear(ctx, gearRegion.x + gearSize / 2, gearRegion.y + gearSize / 2, gearSize * 0.42, gearActive);
+  // Subtle backing so the tap target is visible
+  ctx.fillStyle = gearActive ? 'rgba(68,153,255,0.22)' : 'rgba(40,52,70,0.5)';
+  roundRect(ctx, gearRegion.x, gearRegion.y, gearSize, gearSize, 14);
+  ctx.fill();
+  ctx.strokeStyle = gearActive ? '#7dd3ff' : 'rgba(120,140,170,0.5)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  drawGear(ctx, gearRegion.x + gearSize / 2, gearRegion.y + gearSize / 2, gearSize * 0.34, gearActive);
 
   // ---- clock section (top 28%) ----
   const clockH = Math.round(h * 0.28);
@@ -562,6 +569,20 @@ export function drawSettingsMenu(ctx, w, h, opts) {
       { id: 'theme:day',   label: '☀ Day',   active: currentTheme === 'day' },
       { id: 'theme:night', label: '☾ Night', active: currentTheme === 'night' },
     ], regions);
+
+    // Quick panel show/hide (the weather panel docks beside this menu).
+    yCursor += 24;
+    const wx = features.find((f) => f.id === 'weather');
+    if (wx) {
+      ctx.fillStyle = '#7d8b9e';
+      ctx.font = '16px ui-sans-serif, system-ui, sans-serif';
+      ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+      ctx.fillText('PANELS', 28, yCursor);
+      yCursor += 28;
+      yCursor = drawToggleRow(ctx, 28, yCursor, w - 56,
+        { id: 'weather', label: 'Weather Panel', desc: 'METAR · wind · active runway', enabled: wx.enabled },
+        regions);
+    }
   } else {
     // Advanced — ATC feature toggles, each a full-width on/off row.
     ctx.fillStyle = '#7d8b9e';

@@ -398,6 +398,34 @@ renderer.setAnimationLoop((time, frame) => {
     combinedPanel.group.position.copy(tabletop.position).add(combinedOffset);
   }
 
+  layoutDockedPanels();
   refreshPanels();
   renderer.render(scene, camera);
 });
+
+// Keep the settings menu and the weather panel docked to the combined panel so
+// they stay reachable after the user repositions the tabletop / panel. The
+// settings menu sits to the right of the combined panel; the weather panel
+// sits just to the right of the settings menu ("at the side of the menu").
+const _dockRight = new THREE.Vector3();
+const _dockUp = new THREE.Vector3();
+function layoutDockedPanels() {
+  const cp = combinedPanel.group;
+  cp.getWorldDirection(_dockRight);            // forward (-Z of panel)
+  // right vector = up × forward; use world up
+  _dockUp.set(0, 1, 0);
+  _dockRight.crossVectors(_dockUp, _dockRight).normalize(); // panel's right in world
+
+  // Settings menu — only repositioned while hidden so the user can still drag
+  // it somewhere custom while it's open.
+  if (!settingsMenu.group.visible) {
+    settingsMenu.group.position.copy(cp.position).addScaledVector(_dockRight, 0.66);
+    settingsMenu.group.quaternion.copy(cp.quaternion);
+  }
+  // Weather panel docks just beyond the settings menu (its "side").
+  const wx = features.weather?.group;
+  if (wx && wx.visible) {
+    wx.position.copy(settingsMenu.group.position).addScaledVector(_dockRight, 0.46);
+    wx.quaternion.copy(cp.quaternion);
+  }
+}

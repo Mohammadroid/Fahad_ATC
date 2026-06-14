@@ -116,9 +116,10 @@ export function createWeatherPanel({ scene, SpatialPanel, interaction }) {
   }
 
   function setEnabled(on) { enabled = on; panel.group.visible = on; if (on) lastDraw = 0; }
+  function isEnabled() { return enabled; }
   function dispose() { scene.remove(panel.group); }
 
-  return { setEnabled, update, dispose };
+  return { setEnabled, isEnabled, update, dispose, group: panel.group };
 }
 
 function roundRect(ctx, x, y, w, h, r) {
