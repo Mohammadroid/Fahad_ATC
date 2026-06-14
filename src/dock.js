@@ -127,24 +127,31 @@ export class PanelDock {
   }
 
   update() {
-    const R = new THREE.Vector3(1, 0, 0).applyQuaternion(this.quat);
-    const U = new THREE.Vector3(0, 1, 0).applyQuaternion(this.quat);
-
     const main0 = this.entries.find((e) => e.side === 'main');
     const mainHalf = (main0 ? main0.panel.height : 0.5) / 2;
-    const down = U.clone().multiplyScalar(-(mainHalf + 0.07));
     const base = this.tabletop.position.clone().add(this.offset);
 
-    // Move-all handle drives the row's manual shift.
+    // Move-all handle drives BOTH the row's position (drag with one hand) and
+    // its orientation (grab with two hands and twist). While grabbed, the row
+    // follows the handle's transform; otherwise the handle is parked just
+    // below the main panel.
     let anchor;
     if (this.handleGrabbed) {
-      anchor = this.moveHandle.group.position.clone().sub(down);
+      this.quat.copy(this.moveHandle.group.quaternion);          // spin follows handle
+      const downNow = new THREE.Vector3(0, 1, 0).applyQuaternion(this.quat)
+        .multiplyScalar(-(mainHalf + 0.07));
+      anchor = this.moveHandle.group.position.clone().sub(downNow);
       this.manualShift.copy(anchor).sub(base);
     } else {
       anchor = base.clone().add(this.manualShift);
+      const down = new THREE.Vector3(0, 1, 0).applyQuaternion(this.quat)
+        .multiplyScalar(-(mainHalf + 0.07));
       this.moveHandle.group.position.copy(anchor).add(down);
       this.moveHandle.group.quaternion.copy(this.quat);
     }
+
+    const R = new THREE.Vector3(1, 0, 0).applyQuaternion(this.quat);
+    const U = new THREE.Vector3(0, 1, 0).applyQuaternion(this.quat);
 
     for (const e of this.entries) {
       e._active = e.isActive ? e.isActive() : true;
