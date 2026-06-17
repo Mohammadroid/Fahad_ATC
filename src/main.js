@@ -347,20 +347,25 @@ function refreshPanels() {
         demoTime: traffic?.isDemo ? traffic.demoTime : null,
       });
       combinedGearRegion = r?.gearRegion || null;
+      combinedResetRegion = r?.resetRegion || null;
     });
   }
 }
+let combinedResetRegion = null;
 refreshPanels();
 
-// Gear click handler — sits on the combined panel so the icon is "part of
-// the big screen" rather than a floating sibling.
+// Gear + demo-reset click handler — both sit on the combined panel.
+function inRegion(px, py, r) { return r && px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; }
 combinedPanel.group.userData.onPinchClick = (uv) => {
-  if (!uv || !combinedGearRegion) return false;
+  if (!uv) return false;
   const px = uv.x * combinedPanel.canvas.width;
   const py = (1 - uv.y) * combinedPanel.canvas.height;
-  const r = combinedGearRegion;
-  if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) {
+  if (inRegion(px, py, combinedGearRegion)) {
     settingsMenu.group.visible = !settingsMenu.group.visible;
+    return true;
+  }
+  if (inRegion(px, py, combinedResetRegion)) {
+    traffic?.reset?.();   // restart the scripted demo from t=0
     return true;
   }
   return false;

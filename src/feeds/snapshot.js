@@ -216,6 +216,14 @@ export class SnapshotPlayer {
     return group;
   }
 
+  // Restart the scripted demo from t=0 (used by the on-screen reset button so a
+  // presenter can re-run the demo on the fly while casting).
+  reset() {
+    if (!this.isDemo) return;
+    this.demoTime = 0;
+    this._loggedFirst = false;
+  }
+
   // Scripted demo animation: interpolate each aircraft's position/state from
   // pre-computed waypoints. Static snapshots (live, curated) don't animate.
   update(dt) {

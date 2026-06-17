@@ -265,6 +265,17 @@ export function drawCombinedPanel(ctx, w, h, opts) {
   ctx.stroke();
   drawGear(ctx, gearRegion.x + gearSize / 2, gearRegion.y + gearSize / 2, gearSize * 0.34, gearActive);
 
+  // ---- demo reset button (left of the gear, only in demo mode) ----
+  let resetRegion = null;
+  if (typeof opts.demoTime === 'number') {
+    const rs = gearSize;
+    resetRegion = { x: gearRegion.x - rs - 12, y: gearPad, w: rs, h: rs };
+    ctx.fillStyle = 'rgba(255, 180, 60, 0.18)';
+    roundRect(ctx, resetRegion.x, resetRegion.y, rs, rs, 14); ctx.fill();
+    ctx.strokeStyle = '#ffb43c'; ctx.lineWidth = 2; ctx.stroke();
+    drawResetIcon(ctx, resetRegion.x + rs / 2, resetRegion.y + rs / 2, rs * 0.32);
+  }
+
   // ---- clock section (top 28%) ----
   const clockH = Math.round(h * 0.28);
   drawClockSection(ctx, 0, 0, w, clockH);
@@ -316,7 +327,28 @@ export function drawCombinedPanel(ctx, w, h, opts) {
     extraKey: 'hdg',
   });
 
-  return { gearRegion };
+  return { gearRegion, resetRegion };
+}
+
+// Circular "restart" arrow.
+function drawResetIcon(ctx, cx, cy, radius) {
+  ctx.save();
+  ctx.strokeStyle = '#ffb43c';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, -Math.PI * 0.35, Math.PI * 1.25, false);
+  ctx.stroke();
+  // arrowhead at the start of the arc
+  const a = -Math.PI * 0.35;
+  const hx = cx + Math.cos(a) * radius, hy = cy + Math.sin(a) * radius;
+  ctx.beginPath();
+  ctx.moveTo(hx, hy);
+  ctx.lineTo(hx - 8, hy - 9);
+  ctx.moveTo(hx, hy);
+  ctx.lineTo(hx + 9, hy - 6);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawGear(ctx, cx, cy, radius, active = false) {
